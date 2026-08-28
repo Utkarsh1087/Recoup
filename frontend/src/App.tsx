@@ -58,11 +58,11 @@ const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     if (path === "/cases") return "Revenue Recovery Center";
     if (path === "/transactions") return "Transaction Log Ledger";
     if (path === "/customers") return "Merchant Customer base";
-    if (path === "/agent") return "RecoverAI Orchestrator Core";
+    if (path === "/agent") return "Recoup Orchestrator Core";
     if (path === "/analytics") return "Financial Analytics Engine";
     if (path === "/audit-logs") return "Systemic Operations Trace Log";
     if (path === "/settings") return "Configuration settings";
-    return "RecoverAI Protection";
+    return "Recoup Protection";
   };
 
   return (

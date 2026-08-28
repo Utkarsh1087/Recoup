@@ -36,7 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReset }) => {
           <DollarSign className="w-5 h-5" />
         </div>
         <div>
-          <span className="font-bold text-lg text-slate-900 tracking-wide">Recover<span className="text-sky-500">AI</span></span>
+          <span className="font-bold text-lg text-slate-900 tracking-wide">Re<span className="text-sky-500">coup</span></span>
           <span className="block text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Revenue Protection</span>
         </div>
       </div>
@@ -45,18 +45,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReset }) => {
       <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
-          const Icon = item.icon;
           return (
             <Link
               key={item.name}
               to={item.path}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 isActive 
-                  ? "bg-sky-50 text-sky-600 border-l-4 border-sky-500 shadow-sm" 
-                  : "hover:bg-slate-50 hover:text-slate-900 text-slate-500"
+                  ? "bg-sky-50 text-sky-600 shadow-sm" 
+                  : "hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? "text-sky-500" : "text-slate-400"}`} />
+              <item.icon className="w-4 h-4 shrink-0" />
               {item.name}
             </Link>
           );
@@ -72,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReset }) => {
           Reset Demo Data
         </button>
         <div className="text-[10px] text-center text-slate-400 font-mono">
-          RecoverAI v1.0.0 (Test Mode)
+          Recoup v1.0.0 (Test Mode)
         </div>
       </div>
     </div>

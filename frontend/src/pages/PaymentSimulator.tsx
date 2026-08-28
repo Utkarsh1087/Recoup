@@ -47,7 +47,7 @@ export const PaymentSimulator: React.FC = () => {
               <div className="inline-flex p-3 rounded-full bg-emerald-500/10 text-emerald-400 mb-2 border border-emerald-500/20">
                 <CreditCard className="w-6 h-6" />
               </div>
-              <h2 className="text-lg font-bold text-white">RecoverAI Secure Gateway</h2>
+              <h2 className="text-lg font-bold text-white">Recoup Secure Gateway</h2>
               <p className="text-xs text-slate-500">Test-Mode Payment Simulation Sandbox</p>
             </div>
 
@@ -104,7 +104,7 @@ export const PaymentSimulator: React.FC = () => {
               </p>
             </div>
             <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800/60 text-[10px] text-slate-500 font-mono">
-              The RecoverAI case state has shifted to RECOVERED. You can close this tab now.
+              The Recoup case state has shifted to RECOVERED. You can close this tab now.
             </div>
           </div>
         )}
@@ -121,7 +121,7 @@ export const PaymentSimulator: React.FC = () => {
               </p>
             </div>
             <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800/60 text-[10px] text-slate-500 font-mono">
-              The RecoverAI case has registered retry failure and updated audit timelines.
+              The Recoup case has registered retry failure and updated audit timelines.
             </div>
             <button
               onClick={() => setStatus("pending")}

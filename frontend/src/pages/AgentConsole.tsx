@@ -14,7 +14,7 @@ export const AgentConsole: React.FC = () => {
     {
       id: "welcome",
       sender: "agent",
-      text: "Hello! I am RecoverAI, your Revenue Recovery Agent. I can help you monitor at-risk revenue, list outstanding opportunities, or initiate automated recovery workflows. What would you like to do?",
+      text: "Hello! I am Recoup, your Revenue Recovery Agent. I can help you monitor at-risk revenue, list outstanding opportunities, or initiate automated recovery workflows. What would you like to do?",
       timestamp: new Date()
     }
   ]);
@@ -152,7 +152,7 @@ export const AgentConsole: React.FC = () => {
       >
         <input
           type="text"
-          placeholder="Ask RecoverAI to query metrics, find opportunities, or start recovery..."
+          placeholder="Ask Recoup to query metrics, find opportunities, or start recovery..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors shadow-sm"

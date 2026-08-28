@@ -1,6 +1,6 @@
-# RecoverAI — AI Revenue Recovery Agent
+# Recoup — AI Revenue Recovery Agent
 
-RecoverAI is a complete, production-grade agentic revenue recovery platform built for merchants. It detects revenue at risk (failed payments, checkout abandonments, subscription dunning drops, overdue receivables), uses machine learning to score recoverability, applies LLM decision orchestration to choose optimal interventions, enforces strict compliance and safety boundaries, and logs a comprehensive audit timeline.
+Recoup is a complete, production-grade agentic revenue recovery platform built for merchants. It detects revenue at risk (failed payments, checkout abandonments, subscription dunning drops, overdue receivables), uses machine learning to score recoverability, applies LLM decision orchestration to choose optimal interventions, enforces strict compliance and safety boundaries, and logs a comprehensive audit timeline.
 
 ---
 
@@ -8,7 +8,7 @@ RecoverAI is a complete, production-grade agentic revenue recovery platform buil
 Merchants lose billions of dollars annually to leaky payment cycles. Payments fail due to expired cards, temporary gateway timeouts, or lack of funds. Customers abandon high-value carts. Subscriptions fail to renew, and corporate receivables sit overdue. Traditional rule engines are static, unable to adapt, and lead to poor customer experience or policy breaches.
 
 ## The Solution
-RecoverAI implements an agentic workflow that loops dynamically:
+Recoup implements an agentic workflow that loops dynamically:
 ```
   DETECT (Transaction Failure / Abandonment)
     ↓
