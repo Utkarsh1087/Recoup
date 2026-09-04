@@ -90,28 +90,42 @@ class Orchestrator:
             Failed Payments Count: {customer.failed_payments}
             Subscription Status: {customer.subscription_status}
             
-            Respond only with a JSON object that fits this schema:
+            Respond only with a valid JSON object:
             {{
-                "diagnosis": "analysis...",
+                "diagnosis": "string",
                 "priority": "LOW/MEDIUM/HIGH/CRITICAL",
                 "recommended_action": "payment_retry/alternative_payment_method/recovery_message/bounded_incentive/escalate_to_human/stop_recovery",
-                "reasoning": "reason...",
+                "reasoning": "string",
                 "discount_pct": 0.0
             }}
             """
             
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(
-                prompt_content,
-                generation_config={"response_mime_type": "application/json"}
-            )
+            model_candidates = [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.7-flash", "gemini-flash-latest"]
+            response_text = None
             
-            data = json.loads(response.text)
+            for m_name in model_candidates:
+                try:
+                    model = genai.GenerativeModel(m_name)
+                    response = model.generate_content(
+                        prompt_content,
+                        generation_config={"response_mime_type": "application/json"}
+                    )
+                    if response and response.text:
+                        response_text = response.text
+                        break
+                except Exception as model_err:
+                    continue
+            
+            if not response_text:
+                raise ValueError("Could not get response from any candidate Gemini model")
+                
+            data = json.loads(response_text)
             return AgentDecision(**data)
             
         except Exception as e:
             print(f"Gemini call failed ({e}). Falling back to mock decision engine.")
             return self._get_mock_decision(customer, case, probability)
+
 
     def _get_mock_decision(self, customer: Customer, case: RecoveryCase, probability: float) -> AgentDecision:
         """

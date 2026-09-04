@@ -138,8 +138,13 @@ def send_recovery_message(db: Session, case_id: int, customer_id: int, template_
         
     cust = db.query(Customer).filter(Customer.id == customer_id).first()
     
-    # Simulate sending message
-    message = f"Hello {cust.name}, we noticed your payment of INR {case.amount_at_risk} failed. Please complete it here: {get_payment_service().create_payment_link(case.source_id, case.amount_at_risk)}"
+    # Build clean outbound customer message
+    link = get_payment_service().create_payment_link(case.source_id, case.amount_at_risk, {"name": cust.name, "email": cust.email, "phone": cust.phone or ""})
+    message = (
+        f"Hi {cust.name}, we noticed your payment of ₹{case.amount_at_risk:,.2f} for order #{case.source_id} was unsuccessful. "
+        f"You can quickly complete your payment here: {link}\n"
+        f"If you need any help, simply reply to this message."
+    )
     
     # Update case status
     case.status = "IN_PROGRESS"
@@ -150,14 +155,15 @@ def send_recovery_message(db: Session, case_id: int, customer_id: int, template_
         event_type="ACTION_EXECUTION",
         action="recovery_message",
         tool_called="send_recovery_message",
-        tool_input_summary=f"customer_id: {customer_id}, template: {template_name}",
-        tool_result_summary=f"Message dispatched successfully to {cust.phone}. Message snippet: '{message[:60]}...'",
+        tool_input_summary=f"customer_id: {customer_id}, recipient: {cust.phone or cust.email}, template: {template_name}",
+        tool_result_summary=f"Message dispatched successfully to {cust.phone or cust.email}.\n\n--- OUTBOUND MESSAGE ---\n{message}",
         result="PENDING_USER_ACTION"
     )
     db.add(log_action)
     db.commit()
     
-    return {"status": "dispatched", "message": message}
+    return {"status": "dispatched", "message": message, "recipient": cust.phone or cust.email}
+
 
 def create_payment_retry(db: Session, case_id: int, transaction_id: str):
     case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
@@ -321,7 +327,13 @@ def offer_bounded_incentive(db: Session, case_id: int, customer_id: int, discoun
     
     # Calculate new amount
     discounted_amount = case.amount_at_risk * (1 - (discount_pct / 100))
-    link = get_payment_service().create_payment_link(case.source_id, discounted_amount)
+    link = get_payment_service().create_payment_link(case.source_id, discounted_amount, {"name": cust.name, "email": cust.email, "phone": cust.phone or ""})
+    coupon_code = f"SAVE{int(discount_pct)}"
+    message = (
+        f"Hi {cust.name}, complete your purchase for order #{case.source_id} today and get an exclusive "
+        f"{int(discount_pct)}% discount with code {coupon_code}! "
+        f"Discounted total: ₹{discounted_amount:,.2f}. Complete here: {link}"
+    )
     
     case.status = "ACTION_PENDING"
     case.selected_action = "bounded_incentive"
@@ -331,14 +343,15 @@ def offer_bounded_incentive(db: Session, case_id: int, customer_id: int, discoun
         event_type="ACTION_EXECUTION",
         action="bounded_incentive",
         tool_called="offer_bounded_incentive",
-        tool_input_summary=f"discount: {discount_pct}%, original: {case.amount_at_risk} INR",
-        tool_result_summary=f"Offered {discount_pct}% discount. Generated coupon code 'RECOVER{int(discount_pct)}'. Payment link: {link}",
+        tool_input_summary=f"discount: {discount_pct}%, original: ₹{case.amount_at_risk:,.2f}, recipient: {cust.phone or cust.email}",
+        tool_result_summary=f"Offered {discount_pct}% discount (Coupon '{coupon_code}').\n\n--- OUTBOUND MESSAGE ---\n{message}",
         result="PENDING_USER_ACTION"
     )
     db.add(log_action)
     db.commit()
     
-    return {"status": "coupon_offered", "discount_pct": discount_pct, "payment_link": link}
+    return {"status": "coupon_offered", "discount_pct": discount_pct, "payment_link": link, "message": message}
+
 
 def check_payment_status(db: Session, case_id: int, transaction_id: str):
     case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
