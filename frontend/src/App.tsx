@@ -13,8 +13,31 @@ import AuditLogs from "./pages/AuditLogs";
 import Settings from "./pages/Settings";
 import PaymentSimulator from "./pages/PaymentSimulator";
 import { api } from "./services/api";
+import { getCurrentMonthValue, getMonthDateRange } from "./utils/dateUtils";
 
-const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface LayoutWrapperProps {
+  children: React.ReactNode;
+  dateFilterType: "monthly" | "custom";
+  setDateFilterType: (val: "monthly" | "custom") => void;
+  selectedMonth: string;
+  setSelectedMonth: (val: string) => void;
+  startDate: string;
+  setStartDate: (val: string) => void;
+  endDate: string;
+  setEndDate: (val: string) => void;
+}
+
+const LayoutWrapper: React.FC<LayoutWrapperProps> = ({ 
+  children,
+  dateFilterType,
+  setDateFilterType,
+  selectedMonth,
+  setSelectedMonth,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate
+}) => {
   const location = useLocation();
   const [isDemoRunning, setIsDemoRunning] = useState(false);
 
@@ -47,10 +70,6 @@ const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
   };
 
-  if (isSimulator) {
-    return <>{children}</>;
-  }
-
   // Get active title based on path
   const getHeaderTitle = (path: string) => {
     if (path === "/") return "Merchant Overview";
@@ -65,19 +84,31 @@ const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return "Recoup Protection";
   };
 
+  if (isSimulator) {
+    return <>{children}</>;
+  }
+
   return (
-    <div className="flex min-h-screen bg-[#f5f9fc] text-slate-800">
+    <div className="flex min-h-screen bg-[#f5f9fc] text-slate-800 overflow-x-hidden">
       {/* Fixed Sidebar */}
       <Sidebar onReset={handleResetData} />
       
       {/* Main Content Area */}
-      <div className="flex-1 pl-64 flex flex-col min-h-screen">
+      <div className="flex-1 pl-64 flex flex-col min-h-screen min-w-0 overflow-x-hidden">
         <Header 
           title={getHeaderTitle(location.pathname)} 
           onRunDemo={handleRunDemo} 
           isDemoRunning={isDemoRunning} 
+          dateFilterType={dateFilterType}
+          setDateFilterType={setDateFilterType}
+          selectedMonth={selectedMonth}
+          setSelectedMonth={setSelectedMonth}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
         />
-        <main className="flex-1 bg-[#f5f9fc]/50">
+        <main className="flex-1 bg-[#f5f9fc]/50 min-w-0 overflow-x-hidden">
           {children}
         </main>
       </div>
@@ -86,12 +117,29 @@ const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 };
 
 export const App: React.FC = () => {
+  // Global Date/Month Filter States
+  const [dateFilterType, setDateFilterType] = useState<"monthly" | "custom">("monthly");
+  const initialMonth = getCurrentMonthValue();
+  const initialRange = getMonthDateRange(initialMonth);
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth); // Dynamic YYYY-MM
+  const [startDate, setStartDate] = useState(initialRange.startDate);
+  const [endDate, setEndDate] = useState(initialRange.endDate);
+
   return (
     <Router>
-      <LayoutWrapper>
+      <LayoutWrapper
+        dateFilterType={dateFilterType}
+        setDateFilterType={setDateFilterType}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+      >
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/cases" element={<Cases />} />
+          <Route path="/" element={<Dashboard dateFilterType={dateFilterType} selectedMonth={selectedMonth} startDate={startDate} endDate={endDate} />} />
+          <Route path="/cases" element={<Cases dateFilterType={dateFilterType} selectedMonth={selectedMonth} startDate={startDate} endDate={endDate} />} />
           <Route path="/cases/:id" element={<CaseDetail />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/customers" element={<Customers />} />

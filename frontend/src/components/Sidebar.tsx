@@ -8,7 +8,8 @@ import {
   Bot, 
   BarChart3, 
   History,
-  DollarSign
+  DollarSign,
+  Settings as SettingsIcon
 } from "lucide-react";
 
 interface SidebarProps {
@@ -26,7 +27,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReset }) => {
     { name: "AI Agent", path: "/agent", icon: Bot },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },
     { name: "Audit Logs", path: "/audit-logs", icon: History },
+    { name: "Settings", path: "/settings", icon: SettingsIcon },
   ];
+
 
   return (
     <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 text-slate-600 shadow-sm">
