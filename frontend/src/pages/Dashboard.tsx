@@ -11,11 +11,12 @@ import {
   TrendingUp, 
   CheckCircle, 
   ArrowRight, 
-  Activity,
-  Zap,
-  DollarSign,
-  Target,
-  Sparkles
+  Activity, 
+  Zap, 
+  DollarSign, 
+  Target, 
+  Sparkles,
+  AlertTriangle
 } from "lucide-react";
 import { getAvailableMonths } from "../utils/dateUtils";
 import { ProcessedCaseResult } from "../components/AiMissionControlModal";
@@ -26,11 +27,11 @@ import {
   XAxis, 
   YAxis, 
   Tooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell,
-  Legend
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  Cell, 
+  Legend 
 } from "recharts";
 
 const formatCurrency = (val: number) => {
@@ -65,6 +66,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [metrics, setMetrics] = useState({
     monthlySales: 0,
     achievableRevenue: 0,
+    revenueAtRisk: 0,
     struckRecovered: 0,
     recoveryRate: 0,
     humanSupportNeeded: 0
@@ -171,6 +173,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setMetrics({
       monthlySales: totalMonthlySale,
       achievableRevenue: totalAchievableRevenue,
+      revenueAtRisk: revenueAtRisk,
       struckRecovered: struckRecovered,
       recoveryRate: recoveryRate,
       humanSupportNeeded: humanSupportNeeded
@@ -239,14 +242,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen text-slate-800">
       
-      {/* 1. Five KPIs Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+      {/* 1. Six KPIs Metrics Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
         
         {/* Card 1: Total Monthly Sale */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 relative overflow-hidden shadow-sm flex flex-col justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 relative overflow-hidden shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Total Monthly Sale</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Monthly Sale</span>
               <h3 className="text-xl font-extrabold text-slate-900 mt-2">{formatCurrency(metrics.monthlySales)}</h3>
             </div>
             <div className="bg-sky-50 p-2 rounded-lg text-sky-600 border border-sky-100">
@@ -254,15 +257,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="mt-4 flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
-            Money received in {getActivePeriodLabel()}
+            Received in {getActivePeriodLabel()}
           </div>
         </div>
 
         {/* Card 2: Total Achievable Revenue */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 relative overflow-hidden shadow-sm flex flex-col justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 relative overflow-hidden shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Achievable Revenue</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Achievable Revenue</span>
               <h3 className="text-xl font-extrabold text-slate-900 mt-2">{formatCurrency(metrics.achievableRevenue)}</h3>
             </div>
             <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600 border border-indigo-100">
@@ -270,15 +273,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="mt-4 flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
-            Potential sales in {getActivePeriodLabel()}
+            Potential in {getActivePeriodLabel()}
           </div>
         </div>
 
         {/* Card 3: Struck Revenue Recovered */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 relative overflow-hidden shadow-sm flex flex-col justify-between">
+        <div className="bg-white border border-emerald-200/80 rounded-xl p-5 relative overflow-hidden shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Struck Recovered</span>
+              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider block">Struck Recovered</span>
               <h3 className="text-xl font-extrabold text-emerald-600 mt-2">{formatCurrency(metrics.struckRecovered)}</h3>
             </div>
             <div className="bg-emerald-50 p-2 rounded-lg text-emerald-600 border border-emerald-100">
@@ -290,11 +293,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Recovery Rate */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 relative overflow-hidden shadow-sm flex flex-col justify-between">
+        {/* Card 4: Revenue at Risk */}
+        <div className="bg-white border border-rose-200/80 rounded-xl p-5 relative overflow-hidden shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Recovery Rate</span>
+              <span className="text-[11px] font-bold text-rose-500 uppercase tracking-wider block">Revenue at Risk</span>
+              <h3 className="text-xl font-extrabold text-rose-600 mt-2">{formatCurrency(metrics.revenueAtRisk)}</h3>
+            </div>
+            <div className="bg-rose-50 p-2 rounded-lg text-rose-600 border border-rose-100">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
+            Open risk in {getActivePeriodLabel()}
+          </div>
+        </div>
+
+        {/* Card 5: Recovery Rate */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 relative overflow-hidden shadow-sm flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Recovery Rate</span>
               <h3 className="text-xl font-extrabold text-sky-600 mt-2">{metrics.recoveryRate.toFixed(1)}%</h3>
             </div>
             <div className="bg-sky-50 p-2 rounded-lg text-sky-600 border border-sky-100">
@@ -302,15 +321,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="mt-4 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-            <div className="bg-sky-500 h-full rounded-full" style={{ width: `${metrics.recoveryRate}%` }}></div>
+            <div className="bg-sky-500 h-full rounded-full" style={{ width: `${Math.min(metrics.recoveryRate, 100)}%` }}></div>
           </div>
         </div>
 
-        {/* Card 5: Human Support Needed */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 relative overflow-hidden shadow-sm flex flex-col justify-between">
+        {/* Card 6: Human Support Needed */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 relative overflow-hidden shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Human Support</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Human Support</span>
               <h3 className="text-xl font-extrabold text-amber-600 mt-2">{metrics.humanSupportNeeded}</h3>
             </div>
             <div className="bg-amber-50 p-2 rounded-lg text-amber-600 border border-amber-100">

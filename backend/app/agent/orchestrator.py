@@ -341,26 +341,21 @@ class Orchestrator:
         """
         msg = user_message.strip().lower()
 
-        # Check if user spoke in Hinglish or asked for Hinglish
+        # Identify language style
         hinglish_words = [
             "hinglish", "hindi", "karo", "karein", "batao", "dikhao", "hai", "hain", 
             "kitna", "kitne", "paisa", "paise", "kaise", "kya", "pehle", "sabse", 
-            "chalu", "shuru", "madad", "rupaye", "rupay", "bhejo", "kardo", "ka", "ki", "ke", "mein", "me"
+            "chalu", "shuru", "madad", "rupaye", "rupay", "bhejo", "kardo", "ka", "ki", "ke", "mein", "me", "kisko"
         ]
         is_hinglish = any(re.search(rf"\b{w}\b", msg) for w in hinglish_words)
 
-        # 1. Action Intent: Run / Start / Recover / Execute / Process a case
-        action_keywords = ["start", "recover", "run", "process", "execute", "retry", "fix", "resolve", "chalu", "shuru", "karo", "kardo"]
-        is_action_intent = any(k in msg for k in action_keywords)
-        
-        # Look for case ID pattern like "case #940", "case 940", "#940", or isolated number if action keyword present
+        # 1. Check for Action Intent: Explicit command to execute a case recovery
+        # (e.g. "Start recovery for Case #2", "Recover case 15", "case 5 shuru karo")
         case_id_match = re.search(r"(?:case\s*#?|#)\s*(\d+)", msg)
-        if not case_id_match and is_action_intent:
-            number_match = re.search(r"\b(\d+)\b", msg)
-            if number_match:
-                case_id_match = number_match
+        is_action_command = any(re.search(rf"\b{k}\b", msg) for k in ["start", "run", "process", "execute", "retry", "resolve", "chalu", "shuru", "kardo"]) or ("recover" in msg and "recovery" not in msg)
+        is_question = any(w in msg for w in ["which", "what", "who", "how", "list", "show", "status", "details", "info", "kya", "kaise", "dikhao", "batao", "?"])
 
-        if is_action_intent and case_id_match:
+        if is_action_command and case_id_match and not is_question:
             case_id = int(case_id_match.group(1))
             case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
             if not case:
@@ -403,181 +398,7 @@ class Orchestrator:
                 f"- **New Status**: `{new_status}`"
             )
 
-        # 2. Case Inspection / Status Inquiry (e.g. "status of case 940", "show case 940", "case 940 ka status kya hai")
-        if case_id_match and any(w in msg for w in ["status", "show", "inspect", "check", "details", "info", "view", "what about", "dikhao", "batao", "kya hai"]):
-            case_id = int(case_id_match.group(1))
-            case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
-            if not case:
-                return f"Database mein **Case #{case_id}** nahi mila." if is_hinglish else f"Could not find **Case #{case_id}** in the database."
-            cust = db.query(Customer).filter(Customer.id == case.customer_id).first()
-            cust_name = cust.name if cust else f"Customer #{case.customer_id}"
-            return (
-                f"**Case #{case_id} Summary**:\n"
-                f"- **Customer**: {cust_name} ({cust.email if cust else 'N/A'})\n"
-                f"- **Amount at Risk**: ₹{case.amount_at_risk:,.2f}\n"
-                f"- **Amount Recovered**: ₹{case.amount_recovered:,.2f}\n"
-                f"- **Problem Type**: `{case.source_type.replace('_', ' ')}`\n"
-                f"- **Current Status**: `{case.status}`\n"
-                f"- **Recovery Probability**: {int(case.recovery_probability * 100)}%\n"
-                f"- **Priority**: `{case.priority}`\n"
-                f"- **Diagnosis**: {case.diagnosis or 'Pending analysis'}"
-            )
-
-        # 3. Revenue at risk / Stuck / Lost inquiry (e.g. "kitna revenue risk par hai", "kitna paisa at risk hai")
-        if any(w in msg for w in ["revenue at risk", "risk", "stuck", "at-risk", "lost", "paisa at risk", "fasa hua"]):
-            open_cases = db.query(RecoveryCase).filter(
-                RecoveryCase.status.in_(["DETECTED", "ANALYZING", "ACTION_PENDING", "IN_PROGRESS"])
-            ).all()
-            total_risk = sum(c.amount_at_risk for c in open_cases)
-            if is_hinglish:
-                return f"Filhaal, **{len(open_cases)} open cases** mein kul **₹{total_risk:,.2f}** revenue at risk (fasa hua) hai."
-            return f"Currently, there is **₹{total_risk:,.2f}** in revenue at risk across **{len(open_cases)}** open cases."
-
-        # 4. Recovered amount / Success inquiry (e.g. "kitna recover hua", "kitna paisa wapas aaya")
-        if any(w in msg for w in ["recovered", "won back", "recovery rate", "success", "recover hua", "wapas aaya"]):
-            recovered_cases = db.query(RecoveryCase).filter(RecoveryCase.status == "RECOVERED").all()
-            total_recovered = sum(c.amount_recovered for c in recovered_cases)
-            total_cases = db.query(RecoveryCase).count()
-            rate = (len(recovered_cases) / total_cases * 100) if total_cases > 0 else 0
-            if is_hinglish:
-                return f"Recoup ne ab tak **{len(recovered_cases)} cases** mein **₹{total_recovered:,.2f}** successfully recover kar liye hain (All-time recovery rate: **{rate:.1f}%**)."
-            return f"Recoup has successfully won back **₹{total_recovered:,.2f}** across **{len(recovered_cases)}** recovered cases (All-time recovery rate: **{rate:.1f}%**)."
-
-        # 5. Recommendations / Top opportunities (e.g. "sabse pehle kya recover karein", "kisko recover karein")
-        if any(w in msg for w in ["recover first", "opportunities", "opportunity", "recommend", "priority", "top cases", "what to do", "sabse pehle", "pehle kya", "kisko recover"]):
-            opps = db.query(RecoveryCase).filter(
-                RecoveryCase.status.in_(["DETECTED", "ACTION_PENDING"])
-            ).order_by(RecoveryCase.recovery_probability.desc(), RecoveryCase.amount_at_risk.desc()).limit(5).all()
-            
-            if not opps:
-                return "Abhi koi pending high-priority recovery opportunity nahi hai." if is_hinglish else "There are no pending high-priority recovery opportunities at this moment."
-                
-            if is_hinglish:
-                res = "Yeh hain top high-probability recovery opportunities jo abhi pending hain:\n\n"
-                for o in opps:
-                    cust = db.query(Customer).filter(Customer.id == o.customer_id).first()
-                    name = cust.name if cust else f"Customer #{o.customer_id}"
-                    res += f"- **Case #{o.id}**: {name} | Risk: ₹{o.amount_at_risk:,.2f} | Probability: {int(o.recovery_probability*100)}% | Type: `{o.source_type.replace('_', ' ')}`\n"
-                res += "\nAap `Case #<id> start karo` type karke autonomous recovery shuru kar sakte hain."
-                return res
-
-            res = "Here are the top high-probability recovery opportunities currently pending:\n\n"
-            for o in opps:
-                cust = db.query(Customer).filter(Customer.id == o.customer_id).first()
-                name = cust.name if cust else f"Customer #{o.customer_id}"
-                res += f"- **Case #{o.id}**: {name} | Risk: ₹{o.amount_at_risk:,.2f} | Prob: {int(o.recovery_probability*100)}% | Type: `{o.source_type.replace('_', ' ')}`\n"
-            res += "\nYou can type `Start recovery for Case #<id>` to trigger autonomous recovery."
-            return res
-
-        # 6. Customer inquiry by ID (e.g. "customer 15 dikhao", "customer 15 details")
-        cust_match = re.search(r"(?:customer\s*#?|cust\s*#?)\s*(\d+)", msg)
-        if cust_match:
-            cust_id = int(cust_match.group(1))
-            cust = db.query(Customer).filter(Customer.id == cust_id).first()
-            if cust:
-                return (
-                    f"**Customer #{cust.id} Profile**:\n"
-                    f"- **Name**: {cust.name}\n"
-                    f"- **Email**: {cust.email}\n"
-                    f"- **LTV**: ₹{cust.lifetime_value:,.2f}\n"
-                    f"- **Orders**: {cust.successful_orders} successful / {cust.total_orders} total\n"
-                    f"- **Failed Payments**: {cust.failed_payments}\n"
-                    f"- **Subscription Status**: `{cust.subscription_status}`"
-                )
-
-        # 7. Customer Segment & Count Queries (e.g. "customers total kitne hai", "active customers kitne hai", "vip customers")
-        if any(w in msg for w in ["active customer", "active customers", "active subscription", "active subscriptions"]):
-            active_count = db.query(Customer).filter(Customer.subscription_status == "ACTIVE").count()
-            total_cust = db.query(Customer).count()
-            if is_hinglish:
-                return f"Store mein filhaal **{active_count} active subscription customers** hain (Total **{total_cust:,}** customers mein se)."
-            return f"There are currently **{active_count} active subscription customers** in the store (out of **{total_cust:,}** total customers)."
-
-        if any(w in msg for w in ["vip customer", "vip customers", "repeat buyer", "repeat buyers"]):
-            vip_count = db.query(Customer).filter(Customer.lifetime_value >= 50000).count()
-            repeat_count = db.query(Customer).filter(Customer.successful_orders >= 2).count()
-            if is_hinglish:
-                return (
-                    f"**Customer Segments**:\n"
-                    f"- **VIP Customers (LTV ≥ ₹50,000)**: **{vip_count}**\n"
-                    f"- **Repeat Buyers (2+ orders)**: **{repeat_count}**"
-                )
-            return (
-                f"**Customer Segments Summary**:\n"
-                f"- **VIP Customers (LTV ≥ ₹50,000)**: **{vip_count}**\n"
-                f"- **Repeat Buyers (2+ successful orders)**: **{repeat_count}**"
-            )
-
-        if any(w in msg for w in ["customer", "customers", "grahak", "users"]) and any(w in msg for w in ["how many", "count", "total", "kitne", "kitna", "sankhya", "list", "overview", "hai"]):
-            total_cust = db.query(Customer).count()
-            active_cust = db.query(Customer).filter(Customer.subscription_status == "ACTIVE").count()
-            past_due = db.query(Customer).filter(Customer.subscription_status == "PAST_DUE").count()
-            cancelled = db.query(Customer).filter(Customer.subscription_status == "CANCELLED").count()
-            vip_cust = db.query(Customer).filter(Customer.lifetime_value >= 50000).count()
-            if is_hinglish:
-                return (
-                    f"**Store Customer Base Overview**:\n"
-                    f"- **Kul Customers (Total)**: **{total_cust:,}**\n"
-                    f"- **Active Subscriptions**: **{active_cust}**\n"
-                    f"- **Past Due (Payment Pending)**: **{past_due}**\n"
-                    f"- **Cancelled**: **{cancelled}**\n"
-                    f"- **VIP Customers (LTV ≥ ₹50k)**: **{vip_cust}**"
-                )
-            return (
-                f"**Store Customer Directory Overview**:\n"
-                f"- **Total Customers**: **{total_cust:,}**\n"
-                f"- **Active Subscriptions**: **{active_cust}**\n"
-                f"- **Past Due (Action Needed)**: **{past_due}**\n"
-                f"- **Cancelled**: **{cancelled}**\n"
-                f"- **VIP High-LTV Customers**: **{vip_cust}**"
-            )
-
-        # 8. Transaction Count & Ledger Queries (e.g. "transactions total kitne hai", "failed transactions")
-        if any(w in msg for w in ["transaction", "transactions", "tx", "payments", "payment"]) and any(w in msg for w in ["how many", "count", "total", "kitne", "kitna", "failed", "success", "overview"]):
-            total_tx = db.query(Transaction).count()
-            success_tx = db.query(Transaction).filter(Transaction.status == "SUCCESS").count()
-            failed_tx = db.query(Transaction).filter(Transaction.status == "FAILED").count()
-            if is_hinglish:
-                return (
-                    f"**Transaction Ledger Overview**:\n"
-                    f"- **Kul Transactions (Total)**: **{total_tx:,}**\n"
-                    f"- **Kamyab (Successful)**: **{success_tx:,}**\n"
-                    f"- **Failed / Dropped**: **{failed_tx:,}**\n\n"
-                    f"Recoup autonomously in failed transactions ko monitor aur recover karta hai."
-                )
-            return (
-                f"**Transaction Ledger Overview**:\n"
-                f"- **Total Transactions**: **{total_tx:,}**\n"
-                f"- **Successful Checkouts**: **{success_tx:,}**\n"
-                f"- **Failed / Dropped**: **{failed_tx:,}**\n\n"
-                f"Recoup actively monitors and triggers automated recovery interventions on these failed transactions."
-            )
-
-        # 9. Total case count / general stats (e.g. "kitne cases hain", "total cases kitne hain")
-        if any(w in msg for w in ["how many", "count", "total cases", "stats", "overview", "kitne cases"]):
-            total_cases = db.query(RecoveryCase).count()
-            open_cases = db.query(RecoveryCase).filter(
-                RecoveryCase.status.in_(["DETECTED", "ANALYZING", "ACTION_PENDING", "IN_PROGRESS"])
-            ).count()
-            recovered = db.query(RecoveryCase).filter(RecoveryCase.status == "RECOVERED").count()
-            escalated = db.query(RecoveryCase).filter(RecoveryCase.status == "ESCALATED").count()
-            if is_hinglish:
-                return (
-                    f"**Recoup System Overview**:\n"
-                    f"- **Kul Cases (Total)**: **{total_cases}**\n"
-                    f"- **Open / Active Cases**: **{open_cases}**\n"
-                    f"- **Recovered**: **{recovered}**\n"
-                    f"- **Escalated (Human Review)**: **{escalated}**"
-                )
-            return (
-                f"**Recoup System Overview**:\n"
-                f"- **Total Cases**: **{total_cases}**\n"
-                f"- **Open / Active Cases**: **{open_cases}**\n"
-                f"- **Recovered**: **{recovered}**\n"
-                f"- **Escalated to Human**: **{escalated}**"
-            )
-
-        # 8. Freeform / Arbitrary Merchant Question (LLM or Contextual Intelligence)
+        # 2. For ALL questions, inquiries, advice, and conversation: Pass directly to Gemini / LLM with Live Grounding
         return self._generate_freeform_response(user_message, db, is_hinglish)
 
     def _generate_freeform_response(self, user_message: str, db: Session, is_hinglish: bool) -> str:
@@ -599,20 +420,57 @@ class Orchestrator:
         total_cases = db.query(RecoveryCase).count()
         recovery_rate = (len(recovered_cases) / total_cases * 100) if total_cases > 0 else 0
 
+        # Top pending opportunities
+        top_pending = db.query(RecoveryCase).filter(
+            RecoveryCase.status.in_(["DETECTED", "ACTION_PENDING"])
+        ).order_by(RecoveryCase.recovery_probability.desc(), RecoveryCase.amount_at_risk.desc()).limit(8).all()
+        pending_summary = []
+        for p in top_pending:
+            c_obj = db.query(Customer).filter(Customer.id == p.customer_id).first()
+            c_name = c_obj.name if c_obj else f"Customer #{p.customer_id}"
+            pending_summary.append(f"- Case #{p.id}: {c_name} | Risk: ₹{p.amount_at_risk:,.2f} | Prob: {int(p.recovery_probability * 100)}% | Status: {p.status} | Type: {p.source_type}")
+
+        # Top overall high-probability cases
+        high_prob = db.query(RecoveryCase).filter(
+            RecoveryCase.recovery_probability >= 0.70
+        ).order_by(RecoveryCase.recovery_probability.desc()).limit(8).all()
+        high_prob_summary = []
+        for h in high_prob:
+            c_obj = db.query(Customer).filter(Customer.id == h.customer_id).first()
+            c_name = c_obj.name if c_obj else f"Customer #{h.customer_id}"
+            high_prob_summary.append(f"- Case #{h.id}: {c_name} | Risk: ₹{h.amount_at_risk:,.2f} | Prob: {int(h.recovery_probability * 100)}% | Status: {h.status}")
+
+        total_cust = db.query(Customer).count()
+        active_cust = db.query(Customer).filter(Customer.subscription_status == "ACTIVE").count()
+        past_due = db.query(Customer).filter(Customer.subscription_status == "PAST_DUE").count()
+        vip_cust = db.query(Customer).filter(Customer.lifetime_value >= 50000).count()
+
+        total_tx = db.query(Transaction).count()
+        success_tx = db.query(Transaction).filter(Transaction.status == "SUCCESS").count()
+        failed_tx = db.query(Transaction).filter(Transaction.status == "FAILED").count()
+
         # Try live LLM (Gemini or OpenAI) first if keys are present
         if settings.GEMINI_API_KEY or settings.OPENAI_API_KEY:
             try:
                 system_context = (
                     f"You are Recoup, the autonomous AI Revenue Recovery agent for this online store.\n"
-                    f"Current Live Store Data:\n"
+                    f"You have direct access to the live store database.\n\n"
+                    f"Live Financial & Operational Telemetry:\n"
                     f"- Total Recovery Cases: {total_cases}\n"
                     f"- Active Open Cases: {len(open_cases)}\n"
                     f"- Total Revenue at Risk: ₹{total_risk:,.2f}\n"
                     f"- Total Revenue Recovered: ₹{total_recovered:,.2f}\n"
                     f"- Overall Recovery Rate: {recovery_rate:.1f}%\n"
-                    f"- Escalated Cases: {len(escalated_cases)}\n\n"
-                    f"Respond helpfully, concisely, and politely in {'Hinglish (natural conversational Hindi-English blend)' if is_hinglish else 'clear, professional English'}.\n"
-                    f"Format numbers in INR (₹) and use Markdown formatting."
+                    f"- Escalated Cases: {len(escalated_cases)}\n"
+                    f"- Total Customers: {total_cust} (Active Subscriptions: {active_cust}, Past Due: {past_due}, VIP LTV >= ₹50k: {vip_cust})\n"
+                    f"- Total Transactions: {total_tx} (Successful: {success_tx}, Failed: {failed_tx})\n\n"
+                    f"Top Pending Opportunities:\n" + ("\n".join(pending_summary) if pending_summary else "None pending") + "\n\n"
+                    f"Sample High Probability Cases (>= 70%):\n" + ("\n".join(high_prob_summary) if high_prob_summary else "None") + "\n\n"
+                    f"Instructions:\n"
+                    f"- Answer the user's specific question directly, politely, and accurately using this live data.\n"
+                    f"- Respond in {'natural conversational Hinglish (Hindi-English blend)' if is_hinglish else 'clear, professional English'}.\n"
+                    f"- Always format monetary values in INR (₹).\n"
+                    f"- Keep answers focused and well-structured with Markdown."
                 )
 
                 if settings.LLM_PROVIDER == "openai" and settings.OPENAI_API_KEY:
@@ -624,7 +482,7 @@ class Orchestrator:
                             {"role": "system", "content": system_context},
                             {"role": "user", "content": user_message}
                         ],
-                        max_tokens=350
+                        max_tokens=400
                     )
                     if resp.choices and resp.choices[0].message.content:
                         return resp.choices[0].message.content.strip()
