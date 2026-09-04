@@ -69,6 +69,9 @@ class Orchestrator:
             return self._get_mock_decision(customer, case, probability)
 
     def _get_gemini_decision(self, customer: Customer, case: RecoveryCase, probability: float) -> AgentDecision:
+        if not settings.GEMINI_API_KEY or getattr(self, "_gemini_failed_previously", False):
+            return self._get_mock_decision(customer, case, probability)
+
         try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -100,29 +103,22 @@ class Orchestrator:
             }}
             """
             
-            model_candidates = [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.7-flash", "gemini-flash-latest"]
-            response_text = None
+            model_name = settings.GEMINI_MODEL if settings.GEMINI_MODEL in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"] else "gemini-1.5-flash"
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt_content,
+                generation_config={"response_mime_type": "application/json"}
+            )
             
-            for m_name in model_candidates:
-                try:
-                    model = genai.GenerativeModel(m_name)
-                    response = model.generate_content(
-                        prompt_content,
-                        generation_config={"response_mime_type": "application/json"}
-                    )
-                    if response and response.text:
-                        response_text = response.text
-                        break
-                except Exception as model_err:
-                    continue
-            
-            if not response_text:
-                raise ValueError("Could not get response from any candidate Gemini model")
+            if response and response.text:
+                data = json.loads(response.text)
+                return AgentDecision(**data)
+            else:
+                raise ValueError("Empty response from Gemini")
                 
-            data = json.loads(response_text)
-            return AgentDecision(**data)
-            
         except Exception as e:
+            # Mark failed so subsequent batch items execute instantly without hanging
+            self._gemini_failed_previously = True
             print(f"Gemini call failed ({e}). Falling back to mock decision engine.")
             return self._get_mock_decision(customer, case, probability)
 
