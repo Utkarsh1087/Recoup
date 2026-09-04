@@ -11,8 +11,19 @@ import {
   User,
   CreditCard,
   Percent,
-  RefreshCw
+  RefreshCw,
+  MessageSquare,
+  Copy,
+  Check,
+  PhoneCall,
+  ExternalLink,
+  Send,
+  UserCheck,
+  Edit3,
+  RotateCcw,
+  Lock
 } from "lucide-react";
+
 
 export const CaseDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +31,10 @@ export const CaseDetail: React.FC = () => {
   const [caseDetail, setCaseDetail] = useState<RecoveryCase | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedMessage, setEditedMessage] = useState("");
 
   const fetchDetail = async () => {
     try {
@@ -49,7 +64,7 @@ export const CaseDetail: React.FC = () => {
   };
 
   const handleEscalate = async () => {
-    const reason = prompt("Enter reason for manual escalation:", "Merchant manual escalation");
+    const reason = prompt("Enter reason for manual escalation:", "Merchant manual escalation to senior team");
     if (reason === null) return;
     try {
       setActionLoading(true);
@@ -63,7 +78,7 @@ export const CaseDetail: React.FC = () => {
   };
 
   const handleStop = async () => {
-    const reason = prompt("Enter reason for stopping recovery workflow:", "Merchant manual cancellation");
+    const reason = prompt("Enter reason for stopping recovery workflow:", "Merchant manual cancellation / customer opt-out");
     if (reason === null) return;
     try {
       setActionLoading(true);
@@ -86,6 +101,12 @@ export const CaseDetail: React.FC = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleCopyMessage = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) {
@@ -123,6 +144,50 @@ export const CaseDetail: React.FC = () => {
   };
 
   const isTerminal = ["RECOVERED", "FAILED", "ESCALATED", "STOPPED"].includes(caseDetail.status);
+  const messagingMode = typeof window !== "undefined" ? localStorage.getItem("recoup_messaging_mode") || "require_approval" : "require_approval";
+
+  const formattedAmt = caseDetail.amount_at_risk.toLocaleString("en-IN");
+  const defaultSimulatorUrl = typeof window !== "undefined" ? `${window.location.origin}/#/payment-simulator/${caseDetail.source_id}` : `http://localhost:5173/#/payment-simulator/${caseDetail.source_id}`;
+
+  const getDynamicGeneratedMessage = () => {
+    const actionLog = caseDetail.audit_logs?.find((l) => l.event_type === "ACTION_EXECUTION");
+    let resultMsg = "";
+    if (actionLog && actionLog.tool_result_summary) {
+      try {
+        const parsed = JSON.parse(actionLog.tool_result_summary);
+        if (parsed.message_sent) resultMsg = parsed.message_sent;
+        else if (parsed.message) resultMsg = parsed.message;
+      } catch {
+        resultMsg = actionLog.tool_result_summary;
+      }
+    }
+    if (resultMsg && !resultMsg.includes("...")) {
+      return resultMsg;
+    }
+    return `Hi ${caseDetail.customer?.name || "there"}, we noticed your transaction of ₹${formattedAmt} for order #${caseDetail.source_id} could not be completed. You can safely complete your payment here: ${defaultSimulatorUrl}`;
+  };
+
+  const activeMessage = editedMessage || getDynamicGeneratedMessage();
+
+  const handleInsertTag = (tag: string) => {
+    setEditedMessage((prev) => (prev ? `${prev} ${tag}` : `${activeMessage} ${tag}`));
+  };
+
+  const handleApproveAndSend = async () => {
+    setIsApproved(true);
+    setIsEditing(false);
+    if (caseDetail.status === "ACTION_PENDING" || caseDetail.status === "DETECTED") {
+      try {
+        setActionLoading(true);
+        await api.runRecovery(caseId);
+        await fetchDetail();
+      } catch (e) {
+        console.error("Error dispatching approved recovery", e);
+      } finally {
+        setActionLoading(false);
+      }
+    }
+  };
 
   return (
     <div className="p-8 space-y-6 bg-slate-50/50 min-h-screen text-slate-800">
@@ -137,11 +202,11 @@ export const CaseDetail: React.FC = () => {
               <h2 className="text-sm font-extrabold text-slate-900">Case #REC-{caseDetail.id}</h2>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
                 caseDetail.status === "RECOVERED" 
-                  ? "bg-emerald-50 border border-emerald-100 text-emerald-600" 
+                  ? "bg-emerald-50 border border-emerald-200 text-emerald-600" 
                   : caseDetail.status === "ESCALATED" 
-                  ? "bg-amber-50 border border-amber-100 text-amber-600" 
+                  ? "bg-amber-50 border border-amber-200 text-amber-700" 
                   : caseDetail.status === "FAILED" 
-                  ? "bg-rose-50 border border-rose-100 text-rose-600"
+                  ? "bg-rose-50 border border-rose-200 text-rose-600"
                   : "bg-slate-100 border border-slate-200 text-slate-600"
               }`}>
                 {caseDetail.status.replace("_", " ")}
@@ -187,15 +252,57 @@ export const CaseDetail: React.FC = () => {
             disabled={actionLoading || caseDetail.status === "RECOVERED"}
             className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all disabled:opacity-50 shadow-sm cursor-pointer"
           >
-            Mark Succeeded
+            Mark Resolved
           </button>
         </div>
       </div>
 
+      {/* Human Escalation Alert Banner if ESCALATED */}
+      {caseDetail.status === "ESCALATED" && (
+        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-5 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-amber-100 p-2 rounded-lg text-amber-700">
+                <UserCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide">Human Escalation Action Hub</h4>
+                <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                  This case requires manual intervention (high value or retry limit reached). Automated agent actions are locked. Review customer details and reach out directly.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <a
+                href={`tel:${caseDetail.customer?.phone || ""}`}
+                className="bg-white border border-amber-200 hover:bg-amber-50 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-xs"
+              >
+                <PhoneCall className="w-3.5 h-3.5" /> Call Customer
+              </a>
+              <a
+                href={`https://wa.me/91${caseDetail.customer?.phone?.replace(/\D/g, "") || ""}?text=${encodeURIComponent(`Hi ${caseDetail.customer?.name || "Customer"}, regarding your order #${caseDetail.source_id} for ₹${caseDetail.amount_at_risk.toLocaleString("en-IN")}: You can complete it here: ${defaultSimulatorUrl}`)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-xs"
+              >
+                <Send className="w-3.5 h-3.5" /> WhatsApp Outreach
+              </a>
+              <button
+                onClick={handleResolve}
+                disabled={actionLoading}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Mark as Resolved
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Grid split columns */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         
-        {/* Left Side: Metadata Card */}
+        {/* Left Side: Metadata Cards */}
         <div className="lg:col-span-2 space-y-6">
           {/* Customer Metadata Card */}
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
@@ -281,6 +388,234 @@ export const CaseDetail: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Outbound Customer Message Preview Bubble Card */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+            
+            {/* 1. Case Already Resolved / Recovered */}
+            {caseDetail.status === "RECOVERED" ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-emerald-500" />
+                    Customer Outreach Status
+                  </h3>
+                  <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Payment Recovered
+                  </span>
+                </div>
+
+                <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-5 text-xs text-emerald-900 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    Payment Successfully Collected
+                  </div>
+                  <p className="text-xs text-emerald-700 leading-relaxed">
+                    Full payment of <strong>₹{caseDetail.amount_recovered.toLocaleString("en-IN")}</strong> has been received. This recovery case is completed and closed — no additional outreach messages will be sent.
+                  </p>
+                </div>
+              </div>
+            ) : caseDetail.status === "STOPPED" ? (
+              /* 2. Case Stopped */
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-slate-400" />
+                    Customer Outreach Status
+                  </h3>
+                  <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2.5 py-1 rounded-full border border-slate-200">
+                    Workflow Stopped
+                  </span>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-600 space-y-1">
+                  <span className="font-bold text-slate-800 block text-xs">Recovery Workflow Halted</span>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Automated outreach for this customer was stopped. No further messages will be sent.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* 3. Active Case (Pending Action / Escalated) */
+              <>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-emerald-500" />
+                    Customer Message Outbound
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsEditing(!isEditing)}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-md border flex items-center gap-1 transition-colors cursor-pointer ${
+                        isEditing 
+                          ? "bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100" 
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Edit3 className="w-3 h-3" /> {isEditing ? "Preview Mode" : "Edit Message"}
+                    </button>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                      messagingMode === "require_approval" && !isApproved
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    }`}>
+                      {messagingMode === "require_approval" && !isApproved ? (
+                        <>
+                          <Lock className="w-3 h-3" /> Requires Approval
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3 h-3" /> {messagingMode === "auto_send" ? "Auto-Sent" : "Approved"}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Permission Mode Banner */}
+                {messagingMode === "require_approval" && !isApproved && (
+                  <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-bold text-amber-900 block text-[11px]">Human Permission Required</span>
+                        <span className="text-[10px] text-amber-700">Review and edit message below before authorizing outbound delivery.</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleApproveAndSend}
+                      disabled={actionLoading}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-xs transition-colors shrink-0 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Dispatch
+                    </button>
+                  </div>
+                )}
+
+                {isEditing ? (
+                  /* Editable Message Textarea Box */
+                  <div className="space-y-3">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
+                          Edit Customer Message
+                        </label>
+                        <span className="text-[9px] text-slate-400 font-mono">
+                          {activeMessage.length} chars
+                        </span>
+                      </div>
+                      <textarea
+                        rows={6}
+                        value={activeMessage}
+                        onChange={(e) => setEditedMessage(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 leading-relaxed font-sans focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                        placeholder="Type custom customer recovery message..."
+                      />
+                      
+                      {/* Quick Variable Tag Helpers */}
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap text-[10px]">
+                        <span className="text-slate-400 font-bold font-mono">Insert:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleInsertTag(`₹${formattedAmt}`)}
+                          className="bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono cursor-pointer"
+                        >
+                          + Amount
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleInsertTag(defaultSimulatorUrl)}
+                          className="bg-white border border-slate-200 hover:bg-slate-100 text-sky-700 px-2 py-0.5 rounded font-mono cursor-pointer"
+                        >
+                          + Payment Link
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleInsertTag("Use code SAVE10 for 10% off!")}
+                          className="bg-white border border-slate-200 hover:bg-slate-100 text-emerald-700 px-2 py-0.5 rounded font-mono cursor-pointer"
+                        >
+                          + 10% Coupon
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditedMessage("");
+                          setIsEditing(false);
+                        }}
+                        className="text-slate-500 hover:text-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Reset to AI Template
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(false)}
+                        className="bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-xs cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Save Changes & Preview
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Chat Bubble View Box */
+                  <div className="space-y-3">
+                    <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl rounded-tl-xs p-4 text-xs text-slate-800 shadow-xs relative">
+                      <div className="flex items-center justify-between text-[10px] text-emerald-800 font-bold mb-1 pb-1 border-b border-emerald-200/60 font-mono">
+                        <span>To: {caseDetail.customer?.name} ({caseDetail.customer?.phone || "Phone"})</span>
+                        <span className="text-emerald-700 font-semibold">
+                          {editedMessage ? "Customized by User" : messagingMode === "require_approval" && !isApproved ? "Draft (Awaiting Approval)" : "AI Generated"}
+                        </span>
+                      </div>
+                      <p className="leading-relaxed whitespace-pre-wrap text-[11px] text-slate-800 font-sans mt-2">
+                        {activeMessage}
+                      </p>
+                      <div className="flex items-center justify-end gap-1 mt-2 text-[10px] text-slate-400">
+                        <span>{new Date(caseDetail.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="text-emerald-600 font-bold">
+                          {messagingMode === "require_approval" && !isApproved ? "⏳" : "✓✓"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCopyMessage(activeMessage)}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copied ? "Copied!" : "Copy Message"}
+                        </button>
+
+                        <a
+                          href={`https://wa.me/91${caseDetail.customer?.phone?.replace(/\D/g, "") || ""}?text=${encodeURIComponent(activeMessage)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-xs"
+                        >
+                          <Send className="w-3 h-3" /> Send WhatsApp
+                        </a>
+                      </div>
+
+                      <a
+                        href={`#/payment-simulator/${caseDetail.source_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sky-600 hover:text-sky-700 text-[11px] font-bold flex items-center gap-1 hover:underline"
+                      >
+                        Open Simulator <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+          </div>
+
         </div>
 
         {/* Right Side: Timeline Audit Trail */}
@@ -363,3 +698,4 @@ export const CaseDetail: React.FC = () => {
   );
 };
 export default CaseDetail;
+

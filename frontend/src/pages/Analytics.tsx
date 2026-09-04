@@ -148,7 +148,7 @@ export const Analytics: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={actionChartData}>
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(v) => `₹${v}`} tickLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(v: any) => `₹${v}`} tickLine={false} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0" }}
                   formatter={(val: any) => [`₹${val.toLocaleString("en-IN")}`]}
