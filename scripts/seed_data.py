@@ -65,12 +65,16 @@ def seed_database():
         print("Generating 1000 customers...")
         customers = []
         now = datetime.datetime.utcnow()
+        email_set = set()
         
         for i in range(1, 1001):
             first = random.choice(FIRST_NAMES)
             last = random.choice(LAST_NAMES)
             name = f"{first} {last}"
-            email = f"{first.lower()}.{last.lower()}{random.randint(10, 9999)}@example.com"
+            email = f"{first.lower()}.{last.lower()}{random.randint(10, 99999)}@example.com"
+            while email in email_set:
+                email = f"{first.lower()}.{last.lower()}{random.randint(10, 99999)}@example.com"
+            email_set.add(email)
             phone = f"{random.choice([7, 8, 9])}{random.randint(100000000, 999999999)}"
             
             # Determine order stats
