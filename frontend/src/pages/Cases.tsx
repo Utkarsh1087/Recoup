@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, RecoveryCase } from "../services/api";
-import { Search, ArrowRight, Sparkles, Bot } from "lucide-react";
+import { Search, ArrowRight, Sparkles } from "lucide-react";
 import { ProcessedCaseResult } from "../components/AiMissionControlModal";
 
 interface CasesProps {
@@ -285,7 +285,7 @@ export const Cases: React.FC<CasesProps> = ({
                                   title="See what AI did for this customer"
                                   className="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 px-2 py-1.5 rounded-md font-bold transition-all shadow-xs cursor-pointer text-[11px]"
                                 >
-                                  <Bot className="w-3 h-3 text-sky-600" />
+                                  <Sparkles className="w-3 h-3 text-sky-600" />
                                   See AI Action
                                 </button>
                               )}

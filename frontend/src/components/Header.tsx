@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, AlertTriangle, Sparkles, Bot } from "lucide-react";
+import { Play, AlertTriangle, Sparkles } from "lucide-react";
 
 interface HeaderProps {
   title: string;
@@ -119,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenMissionControl}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-colors shadow-xs cursor-pointer"
           >
-            <Bot className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
+            <Sparkles className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
             <span>AI Activity ({missionResultsCount})</span>
           </button>
         )}

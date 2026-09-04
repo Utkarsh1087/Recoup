@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { 
   X, 
-  Bot, 
   Sparkles, 
   CheckCircle2, 
   AlertTriangle, 
@@ -106,7 +105,7 @@ export const AiMissionControlModal: React.FC<AiMissionControlModalProps> = ({
         <div className="px-6 py-4 bg-gradient-to-r from-sky-900 via-slate-900 to-indigo-950 text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="bg-sky-500/20 border border-sky-400/30 p-2 rounded-xl text-sky-400">
-              <Bot className="w-5 h-5 animate-pulse" />
+              <Sparkles className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">

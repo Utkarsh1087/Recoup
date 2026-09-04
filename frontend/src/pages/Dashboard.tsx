@@ -15,8 +15,7 @@ import {
   Zap,
   DollarSign,
   Target,
-  Sparkles,
-  Bot
+  Sparkles
 } from "lucide-react";
 import { getAvailableMonths } from "../utils/dateUtils";
 import { ProcessedCaseResult } from "../components/AiMissionControlModal";
@@ -538,7 +537,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               title="See what AI did for this customer"
                               className="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 px-2 py-1.5 rounded-md font-bold transition-all shadow-xs cursor-pointer text-[11px]"
                             >
-                              <Bot className="w-3 h-3 text-sky-600" />
+                              <Sparkles className="w-3 h-3 text-sky-600" />
                               See AI Action
                             </button>
                           )}
