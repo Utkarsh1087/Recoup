@@ -134,10 +134,10 @@ class Orchestrator:
         # High value cap
         if amount > 50000:
             return AgentDecision(
-                diagnosis=f"High risk transaction of {amount} INR exceeds automated policy cap of 50k.",
+                diagnosis=f"This high-value order of ₹{amount:,.2f} exceeds your ₹50,000 store safety limit and was flagged for personal review.",
                 priority="CRITICAL",
                 recommended_action="escalate_to_human",
-                reasoning="Safety policy triggers mandatory manual check for recovery cases exceeding 50,000 INR.",
+                reasoning="Safety guardrail triggered: Large orders require manual verification to protect your revenue.",
                 discount_pct=0.0
             )
             
@@ -149,18 +149,18 @@ class Orchestrator:
             # If customer is highly reliable and this is their first failure
             if success_rate >= 0.8 and customer.failed_payments <= 1:
                 return AgentDecision(
-                    diagnosis="Customer has high payment loyalty. Failure is likely a transient bank/network issue.",
+                    diagnosis="This is a loyal customer who usually pays on time. The failure seems like a temporary bank or network issue.",
                     priority="HIGH",
                     recommended_action="payment_retry",
-                    reasoning="Due to strong historical payment success, an automatic transaction retry is recommended.",
+                    reasoning="Because this customer has a great track record, an automatic retry with the bank is the fastest way to recover the payment.",
                     discount_pct=0.0
                 )
             else:
                 return AgentDecision(
-                    diagnosis="Customer has recurrent payment issues or card failures.",
+                    diagnosis="The customer's card was declined after previous failed attempts. Sending a direct payment link will make it easy for them to complete the order.",
                     priority="MEDIUM",
                     recommended_action="alternative_payment_method",
-                    reasoning="Due to multiple historic failed payment attempts, the customer needs to try an alternative gateway link.",
+                    reasoning="Sending a fresh WhatsApp payment link with multiple payment options (UPI, card, netbanking) will help the customer pay smoothly.",
                     discount_pct=0.0
                 )
                 
@@ -168,45 +168,45 @@ class Orchestrator:
             if amount > 5000 and success_rate < 0.6:
                 # Offer a discount to win them back (bounded discount <= 10%)
                 return AgentDecision(
-                    diagnosis="Checkout abandoned on high-value basket. Customer exhibits price sensitivity.",
+                    diagnosis="The customer added valuable items to their cart but left before completing checkout. A special discount will help win them back.",
                     priority="HIGH",
                     recommended_action="bounded_incentive",
-                    reasoning="To incentivize completion, we will offer a safe, policy-compliant discount coupon of 10%.",
+                    reasoning="Offering a limited 10% discount coupon (SAVE10) will motivate the customer to complete their purchase right away.",
                     discount_pct=10.0
                 )
             else:
                 return AgentDecision(
-                    diagnosis="Standard checkout cart abandoned.",
+                    diagnosis="The customer left items in their shopping cart. A quick, friendly reminder will help them finish their checkout.",
                     priority="LOW",
                     recommended_action="recovery_message",
-                    reasoning="A friendly notification reminding them of their shopping cart items should be sent.",
+                    reasoning="Sending a polite reminder with their cart items is the best friendly approach.",
                     discount_pct=0.0
                 )
                 
         elif source_type == "SUBSCRIPTION_FAILURE":
             if customer.failed_payments > 2:
                 return AgentDecision(
-                    diagnosis="Subscription dunning failure: persistent gateway failures on renewal.",
+                    diagnosis="Subscription renewal failed repeatedly on the customer's card. Personal support is needed to help them update their billing details.",
                     priority="HIGH",
                     recommended_action="escalate_to_human",
-                    reasoning="Multiple automated recurring charges failed. Customer must update payment details via support team.",
+                    reasoning="Automated retries did not go through. A quick support outreach is recommended to keep the subscription active.",
                     discount_pct=0.0
                 )
             else:
                 return AgentDecision(
-                    diagnosis="Subscription billing renewal failed due to transient error.",
+                    diagnosis="Subscription renewal failed due to a temporary bank glitch. A scheduled retry should process successfully.",
                     priority="MEDIUM",
                     recommended_action="payment_retry",
-                    reasoning="Automatic subscription retry is scheduled to resolve temporary renewal drops.",
+                    reasoning="A second automatic charge attempt usually resolves temporary bank drops without bothering the customer.",
                     discount_pct=0.0
                 )
                 
         else: # RECEIVABLE_OVERDUE
             return AgentDecision(
-                diagnosis="Corporate client invoice receivable overdue.",
+                diagnosis="An invoice payment is past due. A gentle follow-up is recommended to help the client settle the payment.",
                 priority="HIGH",
                 recommended_action="escalate_to_human",
-                reasoning="Invoice accounts receivable overdue must undergo account manager escalation.",
+                reasoning="Reaching out directly with an invoice reminder is the most professional way to collect overdue balances.",
                 discount_pct=0.0
             )
 
