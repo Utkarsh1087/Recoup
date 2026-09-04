@@ -113,7 +113,7 @@ export const AiMissionControlModal: React.FC<AiMissionControlModalProps> = ({
                 {isRunning ? (
                   <span className="bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping"></span>
-                    AI WORKING...
+                    ANALYZING & RECOVERING...
                   </span>
                 ) : (
                   <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
@@ -123,7 +123,7 @@ export const AiMissionControlModal: React.FC<AiMissionControlModalProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-slate-300 mt-0.5">
-                AI is checking why payments failed, applying discounts, and sending messages to customers.
+                Checking why payments failed, applying store discounts, and contacting customers.
               </p>
             </div>
           </div>
@@ -151,7 +151,7 @@ export const AiMissionControlModal: React.FC<AiMissionControlModalProps> = ({
           </div>
 
           <div className="text-[11px] text-slate-500 font-medium">
-            {isRunning ? "Checking customer details & preparing messages..." : "All dropped payments have been evaluated."}
+            {isRunning ? "Analyzing failure causes and preparing recovery actions..." : "All dropped payments have been evaluated."}
           </div>
         </div>
 
@@ -160,8 +160,8 @@ export const AiMissionControlModal: React.FC<AiMissionControlModalProps> = ({
           {results.length === 0 && isRunning && (
             <div className="text-center py-12 space-y-3">
               <div className="w-10 h-10 border-3 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="text-xs font-bold text-slate-700">Starting AI Recovery Assistant...</p>
-              <p className="text-[11px] text-slate-400">Finding customers who had payment issues...</p>
+              <p className="text-xs font-bold text-slate-700">Analyzing dropped transactions...</p>
+              <p className="text-[11px] text-slate-400">Evaluating bank failure codes and customer purchase history...</p>
             </div>
           )}
 
