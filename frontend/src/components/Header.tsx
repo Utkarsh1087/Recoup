@@ -113,14 +113,14 @@ export const Header: React.FC<HeaderProps> = ({
           Test Mode Active
         </div>
 
-        {/* Live AI Mission Control Button (Shown when results exist or running) */}
+        {/* Live AI Recovery Activity Button (Shown when results exist or running) */}
         {(missionResultsCount > 0 || isDemoRunning) && (
           <button
             onClick={onOpenMissionControl}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-colors shadow-xs cursor-pointer"
           >
             <Bot className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
-            <span>AI Stream ({missionResultsCount})</span>
+            <span>AI Activity ({missionResultsCount})</span>
           </button>
         )}
 
