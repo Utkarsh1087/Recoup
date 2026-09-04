@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, RecoveryCase } from "../services/api";
 import { Search, ArrowRight, Sparkles } from "lucide-react";
 import { ProcessedCaseResult } from "../components/AiMissionControlModal";
+import { TablePagination } from "../components/TablePagination";
 
 interface CasesProps {
   dateFilterType: "monthly" | "custom";
@@ -22,6 +23,7 @@ export const Cases: React.FC<CasesProps> = ({
   onInspectMissionCase
 }) => {
   const [cases, setCases] = useState<RecoveryCase[]>([]);
+  const [totalCases, setTotalCases] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
@@ -31,7 +33,7 @@ export const Cases: React.FC<CasesProps> = ({
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   const tabs = [
     { label: "All Cases", filter: "All" },
@@ -48,53 +50,55 @@ export const Cases: React.FC<CasesProps> = ({
       setLoading(true);
       const statusParam = ["RECOVERED", "ESCALATED", "FAILED"].includes(activeTab) ? activeTab : "All";
       const sourceParam = ["PAYMENT_FAILURE", "CHECKOUT_ABANDONMENT", "SUBSCRIPTION_FAILURE"].includes(activeTab) ? activeTab : "All";
+
+      let startFilter: string | undefined;
+      let endFilter: string | undefined;
+
+      if (dateFilterType === "monthly") {
+        const [year, month] = selectedMonth.split("-").map(Number);
+        startFilter = new Date(year, month - 1, 1).toISOString();
+        endFilter = new Date(year, month, 0, 23, 59, 59).toISOString();
+      } else {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        startFilter = s.toISOString();
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        endFilter = e.toISOString();
+      }
       
-      const data = await api.getRecoveryCases(statusParam, "All", sourceParam);
-      setCases(data);
+      const res = await api.getRecoveryCases({
+        status: statusParam,
+        priority: "All",
+        source_type: sourceParam,
+        search,
+        start_date: startFilter,
+        end_date: endFilter,
+        skip: (currentPage - 1) * itemsPerPage,
+        limit: itemsPerPage
+      });
+      setCases(res.items || []);
+      setTotalCases(res.total || 0);
     } catch (e) {
       console.error("Error fetching cases", e);
+      setCases([]);
+      setTotalCases(0);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchCases();
-  }, [activeTab]);
-
-  // Reset to first page when search filters, dates, or sorting options change
+  // Reset to first page when search filters, dates, or active tab changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, search, dateFilterType, selectedMonth, startDate, endDate, sortBy]);
+  }, [activeTab, search, dateFilterType, selectedMonth, startDate, endDate, itemsPerPage]);
 
-  // Filter cases by active date range
-  const dateFilteredCases = cases.filter((c) => {
-    let startFilter: Date;
-    let endFilter: Date;
+  useEffect(() => {
+    fetchCases();
+  }, [activeTab, search, dateFilterType, selectedMonth, startDate, endDate, currentPage, itemsPerPage]);
 
-    if (dateFilterType === "monthly") {
-      const [year, month] = selectedMonth.split("-").map(Number);
-      startFilter = new Date(year, month - 1, 1);
-      endFilter = new Date(year, month, 0, 23, 59, 59);
-    } else {
-      startFilter = new Date(startDate);
-      startFilter.setHours(0, 0, 0, 0);
-      endFilter = new Date(endDate);
-      endFilter.setHours(23, 59, 59, 999);
-    }
-
-    const cDate = new Date(c.created_at);
-    return cDate >= startFilter && cDate <= endFilter;
-  });
-
-  const filteredCases = dateFilteredCases.filter(c => {
-    const nameMatch = c.customer?.name.toLowerCase().includes(search.toLowerCase());
-    const emailMatch = c.customer?.email.toLowerCase().includes(search.toLowerCase());
-    return nameMatch || emailMatch;
-  });
-
-  // Apply sorting rules
-  const sortedCases = [...filteredCases].sort((a, b) => {
+  // Apply sorting rules to current page view
+  const sortedCases = [...cases].sort((a, b) => {
     if (sortBy === "date_desc") {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     }
@@ -116,13 +120,6 @@ export const Cases: React.FC<CasesProps> = ({
     return 0;
   });
 
-  // Calculate pagination offsets
-  const totalPages = Math.ceil(sortedCases.length / itemsPerPage);
-  const paginatedCases = sortedCases.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "RECOVERED":
@@ -138,15 +135,15 @@ export const Cases: React.FC<CasesProps> = ({
   };
 
   return (
-    <div className="p-8 space-y-8 bg-slate-50/50 min-h-screen text-slate-800">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 bg-slate-50/50 min-h-screen text-slate-800">
       {/* Category Tabs */}
-      <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm overflow-x-auto">
+      <div className="bg-white border border-slate-200 p-3 sm:p-4 rounded-xl shadow-sm overflow-x-auto">
         <div className="flex gap-1.5 min-w-max">
           {tabs.map((tab) => (
             <button
               key={tab.filter}
               onClick={() => setActiveTab(tab.filter)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 activeTab === tab.filter
                   ? "bg-sky-500 text-white shadow-sm"
                   : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
@@ -158,13 +155,14 @@ export const Cases: React.FC<CasesProps> = ({
         </div>
       </div>
 
-      {/* Sort By + Search toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
-        {/* Right filters container */}
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Sort By, Search + Gmail Pagination toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 p-3.5 sm:p-4 rounded-xl shadow-sm">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Recovery Cases</h2>
+
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           {/* Sort By Dropdown */}
           <div className="flex items-center gap-1.5 whitespace-nowrap">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sort By:</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sort:</span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -180,14 +178,26 @@ export const Cases: React.FC<CasesProps> = ({
           </div>
 
           {/* Search Input Box */}
-          <div className="relative w-full md:w-64">
+          <div className="relative w-full sm:w-52 md:w-56">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search customer name..."
+              placeholder="Search ID (e.g. 150), name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors shadow-sm"
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors shadow-sm"
+            />
+          </div>
+
+          {/* Top Gmail-style Pagination */}
+          <div className="border-l border-slate-200 pl-3 sm:pl-4">
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={totalCases}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+              pageSizeOptions={[25, 50, 100]}
             />
           </div>
         </div>
@@ -202,29 +212,29 @@ export const Cases: React.FC<CasesProps> = ({
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[860px]">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-bold uppercase tracking-wider bg-slate-50/50">
-                    <th className="py-4 px-6">Case ID</th>
-                    <th className="py-4 px-6">Customer</th>
-                    <th className="py-4 px-6">Source</th>
-                    <th className="py-4 px-6">Amount</th>
-                    <th className="py-4 px-6 text-center">Probability</th>
-                    <th className="py-4 px-6 text-center">Priority</th>
-                    <th className="py-4 px-6 text-center">Status</th>
-                    <th className="py-4 px-6">Created Date</th>
-                    <th className="py-4 px-6 text-right">Action</th>
+                    <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Case ID</th>
+                    <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Customer</th>
+                    <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Problem</th>
+                    <th className="py-3 px-3 lg:px-4 whitespace-nowrap">At Risk</th>
+                    <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Recovered</th>
+                    <th className="py-3 px-2 lg:px-3 text-center whitespace-nowrap">Probability</th>
+                    <th className="py-3 px-2 lg:px-3 text-center whitespace-nowrap">Priority</th>
+                    <th className="py-3 px-2 lg:px-3 text-center whitespace-nowrap">Status</th>
+                    <th className="py-3 px-3 lg:px-4 text-right whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedCases.length === 0 ? (
+                  {sortedCases.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-12 px-6 text-center text-slate-400 text-xs">
-                        No matching recovery cases found.
+                        No recovery cases match your active filters or search.
                       </td>
                     </tr>
                   ) : (
-                    paginatedCases.map((c) => {
+                    sortedCases.map((c) => {
                       const missionMatch = missionResults.find(r => r.case_id === c.id);
                       return (
                         <tr 
@@ -235,30 +245,43 @@ export const Cases: React.FC<CasesProps> = ({
                               : "border-slate-100 hover:bg-slate-50/20"
                           }`}
                         >
-                          <td className="py-4 px-6 font-mono font-semibold text-slate-400 whitespace-nowrap">
+                          <td className="py-3.5 px-3 lg:px-4 font-mono font-semibold text-slate-500 whitespace-nowrap">#REC-{c.id}</td>
+                          <td className="py-3.5 px-3 lg:px-4">
                             <div className="flex items-center gap-2">
-                              <span>#REC-{c.id}</span>
+                              <div className="min-w-0">
+                                <div className="font-bold text-slate-900 truncate max-w-[120px] sm:max-w-[150px] xl:max-w-[180px]" title={c.customer?.name}>
+                                  {c.customer?.name}
+                                </div>
+                                <div className="text-[10px] text-slate-400 truncate max-w-[120px] sm:max-w-[150px] xl:max-w-[180px]" title={c.customer?.email}>
+                                  {c.customer?.email}
+                                </div>
+                              </div>
                               {missionMatch && (
-                                <span className="bg-sky-100 text-sky-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans">
+                                <span className="bg-sky-100 text-sky-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans shrink-0">
                                   <Sparkles className="w-2.5 h-2.5 text-sky-600" />
-                                  AI Action
+                                  AI
                                 </span>
                               )}
                             </div>
                           </td>
-                          <td className="py-4 px-6 whitespace-nowrap">
-                            <div className="font-bold text-slate-900">{c.customer?.name}</div>
-                            <div className="text-[10px] text-slate-400">{c.customer?.email}</div>
-                          </td>
-                          <td className="py-4 px-6">
-                            <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500 font-mono font-semibold whitespace-nowrap">
-                              {c.source_type.replace("_", " ")}
+                          <td className="py-3.5 px-3 lg:px-4 whitespace-nowrap">
+                            <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 font-mono font-medium whitespace-nowrap inline-block">
+                              {c.source_type.replace(/_/g, " ")}
                             </span>
                           </td>
-                          <td className="py-4 px-6 font-bold text-slate-900 whitespace-nowrap">₹{c.amount_at_risk.toLocaleString("en-IN")}</td>
-                          <td className="py-4 px-6 text-center font-mono font-bold text-slate-700 whitespace-nowrap">{Math.round(c.recovery_probability * 100)}%</td>
-                          <td className="py-4 px-6 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase whitespace-nowrap ${
+                          <td className="py-3.5 px-3 lg:px-4 font-bold text-slate-900 whitespace-nowrap">
+                            ₹{Number(c.amount_at_risk).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3.5 px-3 lg:px-4 font-bold text-emerald-600 whitespace-nowrap">
+                            {c.amount_recovered > 0 
+                              ? `₹${Number(c.amount_recovered).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                              : "—"}
+                          </td>
+                          <td className="py-3.5 px-2 lg:px-3 text-center font-mono font-bold text-slate-700 whitespace-nowrap">
+                            {Math.round(c.recovery_probability * 100)}%
+                          </td>
+                          <td className="py-3.5 px-2 lg:px-3 text-center whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase whitespace-nowrap inline-block ${
                               c.priority === "CRITICAL" 
                                 ? "bg-rose-50 text-rose-600 border border-rose-100" 
                                 : c.priority === "HIGH" 
@@ -270,28 +293,27 @@ export const Cases: React.FC<CasesProps> = ({
                               {c.priority}
                             </span>
                           </td>
-                          <td className="py-4 px-6 text-center">
-                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-semibold tracking-wide uppercase whitespace-nowrap ${getStatusBadge(c.status)}`}>
-                              {c.status.replace("_", " ")}
+                          <td className="py-3.5 px-2 lg:px-3 text-center whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase whitespace-nowrap inline-block ${getStatusBadge(c.status)}`}>
+                              {c.status.replace(/_/g, " ")}
                             </span>
                           </td>
-                          <td className="py-4 px-6 text-slate-400 whitespace-nowrap">{new Date(c.created_at).toLocaleDateString()}</td>
-                          <td className="py-4 px-6 text-right whitespace-nowrap">
+                          <td className="py-3.5 px-3 lg:px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
                               {missionMatch && onInspectMissionCase && (
                                 <button
                                   type="button"
                                   onClick={() => onInspectMissionCase(c.id)}
                                   title="See what AI did for this customer"
-                                  className="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 px-2 py-1.5 rounded-md font-bold transition-all shadow-xs cursor-pointer text-[11px]"
+                                  className="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 px-2 py-1 rounded-md font-bold transition-all shadow-xs cursor-pointer text-[11px] whitespace-nowrap"
                                 >
-                                  <Sparkles className="w-3 h-3 text-sky-600" />
-                                  See AI Action
+                                  <Sparkles className="w-2.5 h-2.5 text-sky-600" />
+                                  AI Action
                                 </button>
                               )}
                               <Link 
                                 to={`/cases/${c.id}`}
-                                className="inline-flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1.5 rounded-md font-semibold transition-colors shadow-sm"
+                                className="inline-flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2 py-1 sm:px-2.5 sm:py-1 rounded-md font-semibold transition-all shadow-sm whitespace-nowrap text-xs"
                               >
                                 Inspect
                                 <ArrowRight className="w-3 h-3" />
@@ -306,52 +328,19 @@ export const Cases: React.FC<CasesProps> = ({
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            {filteredCases.length > 0 && (
-              <div className="flex justify-between items-center px-6 py-4 bg-slate-50/50 border-t border-slate-100 text-xs text-slate-500">
-                <div>
-                  Showing <span className="font-bold text-slate-700">{(currentPage - 1) * itemsPerPage + 1}</span> to{" "}
-                  <span className="font-bold text-slate-700">
-                    {Math.min(currentPage * itemsPerPage, filteredCases.length)}
-                  </span>{" "}
-                  of <span className="font-bold text-slate-700">{filteredCases.length}</span> recovery cases
-                </div>
+            {/* Bottom Toolbar Pagination */}
+            {totalCases > 0 && (
+              <div className="flex flex-wrap justify-between items-center gap-3 px-4 sm:px-6 py-3.5 bg-slate-50/50 border-t border-slate-100 text-xs text-slate-500">
+                <span className="text-slate-400 text-[11px]">
+                  Total Cases: <span className="font-bold text-slate-700">{totalCases.toLocaleString("en-IN")}</span>
+                </span>
                 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    className="px-2.5 py-1.5 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors shadow-sm cursor-pointer"
-                  >
-                    First
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="px-2.5 py-1.5 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors shadow-sm cursor-pointer"
-                  >
-                    Previous
-                  </button>
-                  
-                  <span className="px-3 py-1.5 text-slate-600 font-bold bg-slate-100 rounded border border-slate-200">
-                    Page {currentPage} of {totalPages || 1}
-                  </span>
-                  
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className="px-2.5 py-1.5 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors shadow-sm cursor-pointer"
-                  >
-                    Next
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className="px-2.5 py-1.5 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors shadow-sm cursor-pointer"
-                  >
-                    Last
-                  </button>
-                </div>
+                <TablePagination
+                  currentPage={currentPage}
+                  totalItems={totalCases}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                />
               </div>
             )}
           </>

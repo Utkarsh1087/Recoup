@@ -116,13 +116,14 @@ def seed_database():
         sub_id_counter = 1
         
         for cust in customers:
-            # Let's add some successful transactions first to build history
+            days_since_reg = max(1, (now - cust.created_at).days)
+            # Add successful transactions distributed across customer lifetime
             for _ in range(cust.successful_orders):
-                tx_date = cust.created_at + datetime.timedelta(days=random.randint(1, 29))
+                tx_date = cust.created_at + datetime.timedelta(days=random.randint(0, days_since_reg))
                 tx = Transaction(
                     id=tx_id_counter,
                     customer_id=cust.id,
-                    amount=round(random.uniform(200, 15000), 2),
+                    amount=round(random.uniform(500, 18000), 2),
                     currency="INR",
                     payment_method=random.choice(PAYMENT_METHODS),
                     status="SUCCESS",
@@ -135,7 +136,7 @@ def seed_database():
                 
             # If failed payments count > 0, generate failed transactions
             for _ in range(cust.failed_payments):
-                tx_date = now - datetime.timedelta(days=random.randint(1, 28))
+                tx_date = now - datetime.timedelta(days=random.randint(1, min(60, days_since_reg)))
                 fail_reason_tuple = random.choice(FAILURE_REASONS["PAYMENT_FAILURE"])
                 tx = Transaction(
                     id=tx_id_counter,
@@ -161,7 +162,7 @@ def seed_database():
                     customer_id=cust.id,
                     cart_value=round(random.uniform(300, 8000), 2),
                     items="[{\"id\": 1, \"name\": \"Premium Item\", \"qty\": 1}]",
-                    started_at=cust.created_at + datetime.timedelta(days=random.randint(1, 29)),
+                    started_at=cust.created_at + datetime.timedelta(days=random.randint(0, days_since_reg)),
                     status="COMPLETED"
                 )
                 db.add(co)

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { getAvailableMonths } from "../utils/dateUtils";
 import { ProcessedCaseResult } from "../components/AiMissionControlModal";
+import { TablePagination } from "../components/TablePagination";
 import { 
   AreaChart, 
   Area, 
@@ -72,6 +73,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [sourcesChart, setSourcesChart] = useState<SourceRecovery[]>([]);
   const [timelineChart, setTimelineChart] = useState<TimelinePoint[]>([]);
   const [opps, setOpps] = useState<RecoveryCase[]>([]);
+  const [oppPage, setOppPage] = useState(1);
+  const oppsPerPage = 6;
 
   const monthsList = getAvailableMonths();
 
@@ -86,11 +89,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const loadData = async () => {
     try {
       const [casesData, txsData] = await Promise.all([
-        api.getRecoveryCases("All", "All", "All"),
-        api.getTransactions()
+        api.getAllRecoveryCases(),
+        api.getAllTransactions()
       ]);
-      setAllCases(casesData);
-      setAllTxs(txsData);
+      setAllCases(Array.isArray(casesData) ? casesData : []);
+      setAllTxs(Array.isArray(txsData) ? txsData : []);
     } catch (e) {
       console.error("Error loading dashboard data", e);
     } finally {
@@ -98,12 +101,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Run on mount
+  // Run on mount and poll
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Reload live data immediately whenever AI Agent demo runs or mission results update
+  useEffect(() => {
+    loadData();
+  }, [missionResults]);
 
   // Compute metrics and charts dynamically whenever data or filters change
   useEffect(() => {
@@ -115,13 +123,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     if (dateFilterType === "monthly") {
       const [year, month] = selectedMonth.split("-").map(Number);
-      startFilter = new Date(year, month - 1, 1);
-      endFilter = new Date(year, month, 0, 23, 59, 59);
+      startFilter = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      endFilter = new Date(year, month, 0, 23, 59, 59, 999);
     } else {
-      startFilter = new Date(startDate);
-      startFilter.setHours(0, 0, 0, 0);
-      endFilter = new Date(endDate);
-      endFilter.setHours(23, 59, 59, 999);
+      startFilter = new Date(`${startDate}T00:00:00`);
+      endFilter = new Date(`${endDate}T23:59:59.999`);
     }
 
     // 1. Filter Transactions
@@ -137,7 +143,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
 
     // 3. Compute KPI Metrics
-    const totalMonthlySale = filteredTxs
+    const directSales = filteredTxs
       .filter((t) => t.status === "SUCCESS")
       .reduce((sum, t) => sum + t.amount, 0);
 
@@ -149,7 +155,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
       .filter((c) => ["DETECTED", "ANALYZING", "ACTION_PENDING", "IN_PROGRESS"].includes(c.status))
       .reduce((sum, c) => sum + c.amount_at_risk, 0);
 
-    const totalAchievableRevenue = totalMonthlySale + struckRecovered + revenueAtRisk;
+    // Total sales received in bank = normal checkout sales + AI recovered sales
+    const totalMonthlySale = directSales + struckRecovered;
+    // Achievable revenue = already collected sales + revenue currently stuck at risk
+    const totalAchievableRevenue = totalMonthlySale + revenueAtRisk;
 
     const recoveredCount = filteredCases.filter((c) => c.status === "RECOVERED").length;
     const completedCount = filteredCases.filter((c) => 
@@ -210,9 +219,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
     // 6. Filter Top Opportunities
     const pendingOpps = filteredCases
       .filter((c) => ["DETECTED", "ACTION_PENDING"].includes(c.status))
-      .sort((a, b) => b.amount_at_risk - a.amount_at_risk)
-      .slice(0, 5);
+      .sort((a, b) => b.amount_at_risk - a.amount_at_risk);
     setOpps(pendingOpps);
+    setOppPage(1);
 
   }, [allCases, allTxs, dateFilterType, selectedMonth, startDate, endDate]);
 
@@ -345,16 +354,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 No recovery timeline points recorded for this period.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer 
+                width="100%" 
+                height="100%"
+                key={`area-container-${selectedMonth}-${startDate}-${endDate}-${timelineChart.length}-${metrics.struckRecovered}`}
+              >
                 <AreaChart data={timelineChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15}/>
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.18}/>
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0.01}/>
                     </linearGradient>
                     <linearGradient id="colorRecovered" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.02}/>
                     </linearGradient>
                   </defs>
                   <XAxis 
@@ -387,12 +400,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       }
                     }}
                     formatter={(value: any, name: any) => [
-                      `₹${value.toLocaleString("en-IN")}`,
+                      `₹${Number(value).toLocaleString("en-IN")}`,
                       name === "recovered" ? "Recovered by AI" : "Failed / Dropped"
                     ]}
                   />
-                  <Area type="monotone" dataKey="recovered" name="recovered" stroke="#10b981" fillOpacity={1} fill="url(#colorRecovered)" strokeWidth={2.5} />
                   <Area type="monotone" dataKey="at_risk" name="at_risk" stroke="#ef4444" fillOpacity={1} fill="url(#colorRisk)" strokeWidth={2.5} />
+                  <Area type="monotone" dataKey="recovered" name="recovered" stroke="#10b981" fillOpacity={1} fill="url(#colorRecovered)" strokeWidth={2.5} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -416,24 +429,52 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 No active source channel data recorded.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer 
+                width="100%" 
+                height="100%"
+                key={`bar-container-${selectedMonth}-${startDate}-${endDate}-${sourcesChart.length}-${metrics.struckRecovered}`}
+              >
                 <BarChart 
-                  data={sourcesChart.map((s) => ({
-                    ...s,
-                    displayName: s.source === "CHECKOUT_DROPOFF" ? "Cart Dropoff"
-                      : s.source === "FAILED_PAYMENT" ? "Card Failure"
-                      : s.source === "CANCELLED_SUBSCRIPTION" ? "Subscription"
-                      : s.source === "INVOICE_OVERDUE" ? "Overdue Inv"
-                      : s.source.replace(/_/g, " ")
-                  }))}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  data={sourcesChart.map((s) => {
+                    const isCheckout = s.source === "CHECKOUT_ABANDONMENT" || s.source === "CHECKOUT_DROPOFF";
+                    const isPayment = s.source === "FAILED_PAYMENT" || s.source === "PAYMENT_FAILURE";
+                    const isSub = s.source === "CANCELLED_SUBSCRIPTION" || s.source === "SUBSCRIPTION_FAILURE";
+                    const isInvoice = s.source === "INVOICE_OVERDUE" || s.source === "RECEIVABLE_OVERDUE";
+                    return {
+                      ...s,
+                      displayName: isCheckout ? "Checkout"
+                        : isSub ? "Subscription"
+                        : isInvoice ? "Invoices"
+                        : isPayment ? "Card / UPI"
+                        : s.source.replace(/_/g, " "),
+                      fullName: isCheckout ? "Checkout Abandonment"
+                        : isSub ? "Subscription Failure"
+                        : isInvoice ? "Overdue Invoices"
+                        : isPayment ? "Card / UPI Payment Failure"
+                        : s.source.replace(/_/g, " ")
+                    };
+                  })}
+                  margin={{ top: 10, right: 15, left: 0, bottom: 10 }}
                 >
-                  <XAxis dataKey="displayName" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <XAxis 
+                    dataKey="displayName" 
+                    interval={0} 
+                    stroke="#94a3b8" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    dy={5}
+                  />
                   <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(v: any) => formatCurrency(v)} tickLine={false} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0", borderRadius: "10px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                    labelFormatter={(_label: any, payload: any) => {
+                      if (payload && payload[0] && payload[0].payload && payload[0].payload.fullName) {
+                        return payload[0].payload.fullName;
+                      }
+                      return String(_label || "");
+                    }}
                     formatter={(value: any, name: any) => [
-                      `₹${value.toLocaleString("en-IN")}`,
+                      `₹${Number(value).toLocaleString("en-IN")}`,
                       name === "total_recovered" ? "Recovered Amount" : "Failed / At-Risk"
                     ]}
                   />
@@ -455,35 +496,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* 3. Opportunities Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+        <div className="p-6 border-b border-slate-100 flex flex-wrap justify-between items-center gap-3">
           <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">Top Recovery Opportunities ({getActivePeriodLabel()})</h4>
-          <Link to="/cases" className="text-xs font-bold text-sky-500 hover:text-sky-600 flex items-center gap-1">
-            View All Cases
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          
+          <div className="flex items-center gap-4">
+            {opps.length > 0 && (
+              <TablePagination
+                currentPage={oppPage}
+                totalItems={opps.length}
+                itemsPerPage={oppsPerPage}
+                onPageChange={setOppPage}
+              />
+            )}
+            <Link to="/cases" className="text-xs font-bold text-sky-500 hover:text-sky-600 flex items-center gap-1 border-l border-slate-200 pl-4">
+              View All Cases
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[760px]">
             <thead>
               <tr className="border-b border-slate-200 text-slate-400 text-[10px] font-bold uppercase tracking-wider bg-slate-50/50">
-                <th className="py-4 px-6">Customer</th>
-                <th className="py-4 px-6">Source Problem</th>
-                <th className="py-4 px-6">Risk Value</th>
-                <th className="py-4 px-6 text-center">Probability</th>
-                <th className="py-4 px-6 text-center">Priority</th>
-                <th className="py-4 px-6 text-right">Action</th>
+                <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Case ID</th>
+                <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Customer</th>
+                <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Source Problem</th>
+                <th className="py-3 px-3 lg:px-4 whitespace-nowrap">Risk Value</th>
+                <th className="py-3 px-2 lg:px-3 text-center whitespace-nowrap">Probability</th>
+                <th className="py-3 px-2 lg:px-3 text-center whitespace-nowrap">Priority</th>
+                <th className="py-3 px-3 lg:px-4 text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody>
               {opps.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 px-6 text-center text-slate-400 text-xs">
+                  <td colSpan={7} className="py-12 px-6 text-center text-slate-400 text-xs">
                     No active recovery opportunities found for this period.
                   </td>
                 </tr>
               ) : (
-                opps.map((c) => {
+                opps.slice((oppPage - 1) * oppsPerPage, oppPage * oppsPerPage).map((c) => {
                   const missionMatch = missionResults.find(r => r.case_id === c.id);
                   return (
                     <tr 
@@ -494,29 +547,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           : "border-slate-100 hover:bg-slate-50/20"
                       }`}
                     >
-                      <td className="py-4 px-6">
+                      <td className="py-3.5 px-3 lg:px-4 font-mono font-semibold text-slate-500 whitespace-nowrap">#REC-{c.id}</td>
+                      <td className="py-3.5 px-3 lg:px-4">
                         <div className="flex items-center gap-2">
-                          <div>
-                            <div className="font-bold text-slate-900">{c.customer?.name}</div>
-                            <div className="text-[10px] text-slate-400">{c.customer?.email}</div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 truncate max-w-[140px] xl:max-w-[180px]" title={c.customer?.name}>
+                              {c.customer?.name}
+                            </div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-[140px] xl:max-w-[180px]" title={c.customer?.email}>
+                              {c.customer?.email}
+                            </div>
                           </div>
                           {missionMatch && (
-                            <span className="bg-sky-100 text-sky-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans">
+                            <span className="bg-sky-100 text-sky-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans shrink-0">
                               <Sparkles className="w-2.5 h-2.5 text-sky-600" />
                               AI
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="py-4 px-6">
-                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500 font-mono font-semibold">
-                          {c.source_type.replace("_", " ")}
+                      <td className="py-3.5 px-3 lg:px-4 whitespace-nowrap">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 font-mono font-medium whitespace-nowrap inline-block">
+                          {c.source_type.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="py-4 px-6 font-bold text-slate-900">₹{c.amount_at_risk.toLocaleString("en-IN")}</td>
-                      <td className="py-4 px-6 text-center font-mono font-bold text-slate-700">{Math.round(c.recovery_probability * 100)}%</td>
-                      <td className="py-4 px-6 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                      <td className="py-3.5 px-3 lg:px-4 font-bold text-slate-900 whitespace-nowrap">
+                        ₹{Number(c.amount_at_risk).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-2 lg:px-3 text-center font-mono font-bold text-slate-700 whitespace-nowrap">{Math.round(c.recovery_probability * 100)}%</td>
+                      <td className="py-3.5 px-2 lg:px-3 text-center whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase whitespace-nowrap inline-block ${
                           c.priority === "CRITICAL" 
                             ? "bg-rose-50 text-rose-600 border border-rose-100" 
                             : c.priority === "HIGH" 
@@ -528,22 +588,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           {c.priority}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-3.5 px-3 lg:px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {missionMatch && onInspectMissionCase && (
                             <button
                               type="button"
                               onClick={() => onInspectMissionCase(c.id)}
                               title="See what AI did for this customer"
-                              className="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 px-2 py-1.5 rounded-md font-bold transition-all shadow-xs cursor-pointer text-[11px]"
+                              className="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 px-2 py-1 rounded-md font-bold transition-all shadow-xs cursor-pointer text-[11px] whitespace-nowrap"
                             >
-                              <Sparkles className="w-3 h-3 text-sky-600" />
-                              See AI Action
+                              <Sparkles className="w-2.5 h-2.5 text-sky-600" />
+                              AI Action
                             </button>
                           )}
                           <Link 
                             to={`/cases/${c.id}`}
-                            className="inline-flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1.5 rounded-md font-semibold transition-all shadow-sm"
+                            className="inline-flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1 rounded-md font-semibold transition-all shadow-sm whitespace-nowrap text-xs"
                           >
                             Inspect
                             <ArrowRight className="w-3 h-3" />

@@ -196,7 +196,17 @@ export const App: React.FC = () => {
             } 
           />
           <Route path="/cases/:id" element={<CaseDetail />} />
-          <Route path="/transactions" element={<Transactions />} />
+          <Route 
+            path="/transactions" 
+            element={
+              <Transactions 
+                dateFilterType={dateFilterType} 
+                selectedMonth={selectedMonth} 
+                startDate={startDate} 
+                endDate={endDate}
+              />
+            } 
+          />
           <Route path="/customers" element={<Customers />} />
           <Route path="/agent" element={<AgentConsole />} />
           <Route path="/analytics" element={<Analytics />} />

@@ -15,7 +15,12 @@ def get_cases(
     status: Optional[str] = None,
     priority: Optional[str] = None,
     source_type: Optional[str] = None,
-    limit: int = 100,
+    search: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: Optional[int] = Query(50, ge=1, le=5000),
+    all: bool = Query(False),
     db: Session = Depends(get_db)
 ):
     query = db.query(RecoveryCase).options(joinedload(RecoveryCase.customer))
@@ -27,7 +32,44 @@ def get_cases(
     if source_type and source_type != "All":
         query = query.filter(RecoveryCase.source_type == source_type)
         
-    return query.order_by(RecoveryCase.created_at.desc()).limit(limit).all()
+    if start_date:
+        query = query.filter(RecoveryCase.created_at >= start_date)
+    if end_date:
+        query = query.filter(RecoveryCase.created_at <= end_date)
+        
+    if search:
+        search_clean = search.strip()
+        if search_clean.isdigit():
+            query = query.filter((RecoveryCase.id == int(search_clean)) | (RecoveryCase.customer_id == int(search_clean)))
+        elif search_clean.upper().startswith("REC-") and search_clean[4:].isdigit():
+            query = query.filter(RecoveryCase.id == int(search_clean[4:]))
+        elif search_clean.upper().startswith("#REC-") and search_clean[5:].isdigit():
+            query = query.filter(RecoveryCase.id == int(search_clean[5:]))
+        elif search_clean.upper().startswith("CUST-") and search_clean[5:].isdigit():
+            query = query.filter(RecoveryCase.customer_id == int(search_clean[5:]))
+        elif search_clean.upper().startswith("#CUST-") and search_clean[6:].isdigit():
+            query = query.filter(RecoveryCase.customer_id == int(search_clean[6:]))
+        else:
+            query = query.join(Customer).filter(
+                Customer.name.ilike(f"%{search_clean}%") |
+                Customer.email.ilike(f"%{search_clean}%") |
+                Customer.phone.ilike(f"%{search_clean}%")
+            )
+            
+    total = query.count()
+    
+    if all:
+        items = query.order_by(RecoveryCase.created_at.desc()).all()
+    else:
+        page_limit = limit or 50
+        items = query.order_by(RecoveryCase.created_at.desc()).offset(skip).limit(page_limit).all()
+        
+    return {
+        "items": items,
+        "total": total,
+        "skip": skip,
+        "limit": limit or len(items)
+    }
 
 @router.get("/recovery-cases/{case_id}")
 def get_case_detail(case_id: int, db: Session = Depends(get_db)):
@@ -95,7 +137,8 @@ def manual_stop(case_id: int, reason: str = "Manual merchant cancellation", db: 
 @router.get("/recovery/callback/razorpay")
 def payment_callback(tx_id: str, status: str = "SUCCESS", db: Session = Depends(get_db)):
     """
-    Simulates the webhook/callback response from a gateway.
+    Simulates the webhook/callback response from a payment gateway.
+    Supports transaction IDs, Razorpay references, and case source IDs.
     """
     tx = None
     if tx_id.isdigit():
@@ -103,17 +146,16 @@ def payment_callback(tx_id: str, status: str = "SUCCESS", db: Session = Depends(
     if not tx:
         tx = db.query(Transaction).filter(Transaction.razorpay_reference == tx_id).first()
         
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-        
-    # Update transaction status
-    tx.status = status
-    db.commit()
-    
-    # Locate recovery case associated with this source
+    if tx:
+        tx.status = status
+        db.commit()
+
+    # Locate recovery case associated with this source or ID
     case = db.query(RecoveryCase).filter(RecoveryCase.source_id == tx_id).first()
-    if not case:
+    if not case and tx and tx.razorpay_reference:
         case = db.query(RecoveryCase).filter(RecoveryCase.source_id == tx.razorpay_reference).first()
+    if not case and tx_id.isdigit():
+        case = db.query(RecoveryCase).filter(RecoveryCase.id == int(tx_id)).first()
         
     if case:
         if status == "SUCCESS":
@@ -121,7 +163,70 @@ def payment_callback(tx_id: str, status: str = "SUCCESS", db: Session = Depends(
         else:
             agent_tools.stop_recovery(db, case.id, f"Payment link payment failed: {status}")
             
-    return {"status": "success", "message": f"Payment callback processed: {status}"}
+    return {
+        "status": "success", 
+        "message": f"Payment callback processed: {status}",
+        "case_id": case.id if case else None,
+        "case_status": case.status if case else None
+    }
+
+# Payment Simulator Details Lookup
+@router.get("/recovery/simulator-details/{reference}")
+def get_simulator_details(reference: str, db: Session = Depends(get_db)):
+    """
+    Fetches exact case, transaction, and customer details for the payment simulator.
+    """
+    case = db.query(RecoveryCase).filter(RecoveryCase.source_id == reference).first()
+    if not case and reference.isdigit():
+        case = db.query(RecoveryCase).filter(RecoveryCase.id == int(reference)).first()
+        
+    tx = None
+    if not case:
+        if reference.isdigit():
+            tx = db.query(Transaction).filter(Transaction.id == int(reference)).first()
+        if not tx:
+            tx = db.query(Transaction).filter(Transaction.razorpay_reference == reference).first()
+        if tx:
+            case = db.query(RecoveryCase).filter(RecoveryCase.source_id == str(tx.id)).first()
+            if not case and tx.razorpay_reference:
+                case = db.query(RecoveryCase).filter(RecoveryCase.source_id == tx.razorpay_reference).first()
+
+    if case:
+        cust = db.query(Customer).filter(Customer.id == case.customer_id).first()
+        return {
+            "amount": float(case.amount_at_risk),
+            "customer_name": cust.name if cust else "Valued Customer",
+            "customer_email": cust.email if cust else None,
+            "case_id": case.id,
+            "source_type": case.source_type,
+            "source_id": case.source_id,
+            "status": case.status,
+            "merchant_name": "Recoup Store Merchant"
+        }
+        
+    if tx:
+        cust = db.query(Customer).filter(Customer.id == tx.customer_id).first()
+        return {
+            "amount": float(tx.amount),
+            "customer_name": cust.name if cust else "Valued Customer",
+            "customer_email": cust.email if cust else None,
+            "case_id": None,
+            "source_type": "PAYMENT_FAILURE",
+            "source_id": tx.razorpay_reference or str(tx.id),
+            "status": tx.status,
+            "merchant_name": "Recoup Store Merchant"
+        }
+
+    return {
+        "amount": 2500.0,
+        "customer_name": "Valued Customer",
+        "customer_email": None,
+        "case_id": None,
+        "source_type": "CHECKOUT_ABANDONMENT",
+        "source_id": reference,
+        "status": "PENDING",
+        "merchant_name": "Recoup Store Merchant"
+    }
 
 # Demo triggers
 @router.post("/demo/run")

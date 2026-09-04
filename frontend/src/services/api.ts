@@ -4,6 +4,12 @@ const API_BASE_URL =
     ? "/api" 
     : "http://localhost:8000/api");
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  skip?: number;
+  limit?: number;
+}
 
 export interface DashboardSummary {
   revenue_at_risk: number;
@@ -100,7 +106,6 @@ export const api = {
 
   // Dashboard
   async getDashboardSummary(): Promise<DashboardSummary> {
-
     const res = await fetch(`${API_BASE_URL}/dashboard/summary`);
     return res.json();
   },
@@ -115,15 +120,65 @@ export const api = {
     return res.json();
   },
 
-  // Cases
-  async getRecoveryCases(status = "All", priority = "All", sourceType = "All"): Promise<RecoveryCase[]> {
-    const params = new URLSearchParams();
-    if (status) params.append("status", status);
-    if (priority) params.append("priority", priority);
-    if (sourceType) params.append("source_type", sourceType);
+  // Cases (Server-Side Paginated)
+  async getRecoveryCases(params?: {
+    status?: string;
+    priority?: string;
+    source_type?: string;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+    skip?: number;
+    limit?: number;
+    all?: boolean;
+  }): Promise<PaginatedResponse<RecoveryCase>> {
+    const query = new URLSearchParams();
+    if (params?.status && params.status !== "All") query.append("status", params.status);
+    if (params?.priority && params.priority !== "All") query.append("priority", params.priority);
+    if (params?.source_type && params.source_type !== "All") query.append("source_type", params.source_type);
+    if (params?.search) query.append("search", params.search);
+    if (params?.start_date) query.append("start_date", params.start_date);
+    if (params?.end_date) query.append("end_date", params.end_date);
+    if (params?.skip !== undefined) query.append("skip", String(params.skip));
+    if (params?.limit !== undefined) query.append("limit", String(params.limit));
+    if (params?.all) query.append("all", "true");
 
-    const res = await fetch(`${API_BASE_URL}/recovery-cases?${params.toString()}`);
-    return res.json();
+    const res = await fetch(`${API_BASE_URL}/recovery-cases?${query.toString()}`);
+    if (!res.ok) return { items: [], total: 0 };
+    const data = await res.json();
+    return Array.isArray(data) ? { items: data, total: data.length } : data;
+  },
+
+  async getAllRecoveryCases(): Promise<RecoveryCase[]> {
+    const res = await fetch(`${API_BASE_URL}/recovery-cases?all=true`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.items || [];
+  },
+
+  // Customers (Server-Side Paginated)
+  async getCustomers(params?: {
+    search?: string;
+    subscription_status?: string;
+    segment?: string;
+    sort_by?: string;
+    skip?: number;
+    limit?: number;
+    all?: boolean;
+  }): Promise<PaginatedResponse<Customer>> {
+    const query = new URLSearchParams();
+    if (params?.search) query.append("search", params.search);
+    if (params?.subscription_status && params.subscription_status !== "All") query.append("subscription_status", params.subscription_status);
+    if (params?.segment && params.segment !== "All") query.append("segment", params.segment);
+    if (params?.sort_by) query.append("sort_by", params.sort_by);
+    if (params?.skip !== undefined) query.append("skip", String(params.skip));
+    if (params?.limit !== undefined) query.append("limit", String(params.limit));
+    if (params?.all) query.append("all", "true");
+
+    const res = await fetch(`${API_BASE_URL}/customers?${query.toString()}`);
+    if (!res.ok) return { items: [], total: 0 };
+    const data = await res.json();
+    return Array.isArray(data) ? { items: data, total: data.length } : data;
   },
 
   async getCaseDetail(caseId: number): Promise<RecoveryCase> {
@@ -170,10 +225,38 @@ export const api = {
     return res.json();
   },
 
-  // Data lists
-  async getTransactions(): Promise<Transaction[]> {
-    const res = await fetch(`${API_BASE_URL}/transactions`);
-    return res.json();
+  // Transactions (Server-Side Paginated)
+  async getTransactions(params?: {
+    status?: string;
+    payment_method?: string;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+    skip?: number;
+    limit?: number;
+    all?: boolean;
+  }): Promise<PaginatedResponse<Transaction>> {
+    const query = new URLSearchParams();
+    if (params?.status && params.status !== "All") query.append("status", params.status);
+    if (params?.payment_method && params.payment_method !== "All") query.append("payment_method", params.payment_method);
+    if (params?.search) query.append("search", params.search);
+    if (params?.start_date) query.append("start_date", params.start_date);
+    if (params?.end_date) query.append("end_date", params.end_date);
+    if (params?.skip !== undefined) query.append("skip", String(params.skip));
+    if (params?.limit !== undefined) query.append("limit", String(params.limit));
+    if (params?.all) query.append("all", "true");
+
+    const res = await fetch(`${API_BASE_URL}/transactions?${query.toString()}`);
+    if (!res.ok) return { items: [], total: 0 };
+    const data = await res.json();
+    return Array.isArray(data) ? { items: data, total: data.length } : data;
+  },
+
+  async getAllTransactions(): Promise<Transaction[]> {
+    const res = await fetch(`${API_BASE_URL}/transactions?all=true`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.items || [];
   },
 
   async getCustomer(customerId: number): Promise<Customer> {
@@ -181,9 +264,25 @@ export const api = {
     return res.json();
   },
 
-  async getAuditLogs(): Promise<AuditLog[]> {
-    const res = await fetch(`${API_BASE_URL}/audit-logs`);
-    return res.json();
+  // Audit Logs (Server-Side Paginated)
+  async getAuditLogs(params?: {
+    search?: string;
+    event_type?: string;
+    skip?: number;
+    limit?: number;
+    all?: boolean;
+  }): Promise<PaginatedResponse<AuditLog>> {
+    const query = new URLSearchParams();
+    if (params?.search) query.append("search", params.search);
+    if (params?.event_type && params.event_type !== "All") query.append("event_type", params.event_type);
+    if (params?.skip !== undefined) query.append("skip", String(params.skip));
+    if (params?.limit !== undefined) query.append("limit", String(params.limit));
+    if (params?.all) query.append("all", "true");
+
+    const res = await fetch(`${API_BASE_URL}/audit-logs?${query.toString()}`);
+    if (!res.ok) return { items: [], total: 0 };
+    const data = await res.json();
+    return Array.isArray(data) ? { items: data, total: data.length } : data;
   },
 
   // Demo controls
@@ -198,6 +297,30 @@ export const api = {
     const res = await fetch(`${API_BASE_URL}/demo/reset`, {
       method: "POST"
     });
+    return res.json();
+  },
+
+  async getSimulatorDetails(reference: string): Promise<{
+    amount: number;
+    customer_name: string;
+    customer_email?: string;
+    case_id?: number;
+    source_type: string;
+    source_id: string;
+    status: string;
+    merchant_name: string;
+  }> {
+    const res = await fetch(`${API_BASE_URL}/recovery/simulator-details/${encodeURIComponent(reference)}`);
+    if (!res.ok) {
+      return {
+        amount: 2500,
+        customer_name: "Valued Customer",
+        source_type: "CHECKOUT_ABANDONMENT",
+        source_id: reference,
+        status: "PENDING",
+        merchant_name: "Recoup Store Merchant"
+      };
+    }
     return res.json();
   }
 };

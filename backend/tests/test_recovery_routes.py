@@ -15,10 +15,14 @@ def test_get_recovery_cases():
     response = client.get("/api/recovery-cases")
     assert response.status_code == 200
     cases = response.json()
-    assert isinstance(cases, list)
+    assert "items" in cases
+    assert "total" in cases
+    assert isinstance(cases["items"], list)
 
 def test_get_transactions():
     response = client.get("/api/transactions")
     assert response.status_code == 200
     txs = response.json()
-    assert isinstance(txs, list)
+    assert "items" in txs
+    assert "total" in txs
+    assert isinstance(txs["items"], list)

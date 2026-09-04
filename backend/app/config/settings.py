@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     
     # Razorpay Gateway & Webhook Credentials
+    PAYMENT_MODE: str = os.getenv("PAYMENT_MODE", "mock")  # mock (default demo), live / razorpay
     RAZORPAY_KEY_ID: Optional[str] = os.getenv("RAZORPAY_KEY_ID", None)
     RAZORPAY_KEY_SECRET: Optional[str] = os.getenv("RAZORPAY_KEY_SECRET", None)
     RAZORPAY_WEBHOOK_SECRET: Optional[str] = os.getenv("RAZORPAY_WEBHOOK_SECRET", None)

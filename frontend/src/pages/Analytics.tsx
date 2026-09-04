@@ -22,10 +22,10 @@ export const Analytics: React.FC = () => {
     const loadData = async () => {
       try {
         const [casesData, sumData] = await Promise.all([
-          api.getRecoveryCases("All", "All", "All"),
+          api.getAllRecoveryCases(),
           api.getDashboardSummary()
         ]);
-        setCases(casesData);
+        setCases(Array.isArray(casesData) ? casesData : []);
         setSummary(sumData);
       } catch (e) {
         console.error("Error loading analytics", e);

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { api } from "../services/api";
-import { Send, Bot, User, HelpCircle, Terminal } from "lucide-react";
+import { Send, Bot, User, HelpCircle, Terminal, Trash2 } from "lucide-react";
 
 interface Message {
   id: string;
@@ -9,15 +9,91 @@ interface Message {
   timestamp: Date;
 }
 
-export const AgentConsole: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      sender: "agent",
-      text: "Hello! I am Recoup, your Revenue Recovery Agent. I can help you monitor at-risk revenue, list outstanding opportunities, or initiate automated recovery workflows. What would you like to do?",
-      timestamp: new Date()
+const DEFAULT_WELCOME_MESSAGE: Message = {
+  id: "welcome",
+  sender: "agent",
+  text: "Hello! I am Recoup, your Revenue Recovery Agent. I can help you monitor at-risk revenue, list outstanding opportunities, or initiate automated recovery workflows. What would you like to do?",
+  timestamp: new Date()
+};
+
+// Helper to render markdown-style tokens (bold, code, italics, bullets)
+const parseInlineMarkdown = (text: string): React.ReactNode[] => {
+  const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g;
+  const segments = text.split(tokenRegex);
+
+  return segments.map((seg, i) => {
+    if (seg.startsWith("**") && seg.endsWith("**")) {
+      return (
+        <strong key={i} className="font-bold text-slate-900">
+          {seg.slice(2, -2)}
+        </strong>
+      );
     }
-  ]);
+    if (seg.startsWith("`") && seg.endsWith("`")) {
+      return (
+        <code key={i} className="bg-slate-200/80 text-sky-700 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold">
+          {seg.slice(1, -1)}
+        </code>
+      );
+    }
+    if (seg.startsWith("*") && seg.endsWith("*")) {
+      return (
+        <em key={i} className="italic text-slate-600">
+          {seg.slice(1, -1)}
+        </em>
+      );
+    }
+    return seg;
+  });
+};
+
+const renderFormattedMessage = (text: string) => {
+  const lines = text.split("\n");
+
+  return lines.map((line, lineIdx) => {
+    const isBullet = line.trim().startsWith("- ") || line.trim().startsWith("* ");
+    const content = isBullet ? line.trim().substring(2) : line;
+    const parts = parseInlineMarkdown(content);
+
+    if (isBullet) {
+      return (
+        <div key={lineIdx} className="flex items-start gap-2 my-0.5 ml-1">
+          <span className="text-sky-500 font-bold">•</span>
+          <span className="flex-1">{parts}</span>
+        </div>
+      );
+    }
+
+    if (!line.trim()) {
+      return <div key={lineIdx} className="h-1.5" />;
+    }
+
+    return (
+      <div key={lineIdx} className="leading-relaxed">
+        {parts}
+      </div>
+    );
+  });
+};
+
+export const AgentConsole: React.FC = () => {
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = localStorage.getItem("recoup_agent_chat_history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((m: any) => ({
+            ...m,
+            timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
+          }));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load chat history from localStorage", e);
+    }
+    return [DEFAULT_WELCOME_MESSAGE];
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -35,6 +111,24 @@ export const AgentConsole: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  // Persist messages to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("recoup_agent_chat_history", JSON.stringify(messages));
+    } catch (e) {
+      console.error("Failed to save chat history to localStorage", e);
+    }
+  }, [messages]);
+
+  const handleClearHistory = () => {
+    setMessages([DEFAULT_WELCOME_MESSAGE]);
+    try {
+      localStorage.removeItem("recoup_agent_chat_history");
+    } catch (e) {
+      console.error("Failed to clear chat history from localStorage", e);
+    }
+  };
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
@@ -75,9 +169,22 @@ export const AgentConsole: React.FC = () => {
   return (
     <div className="p-8 bg-slate-50/50 min-h-screen text-slate-800 flex flex-col h-[calc(100vh-4rem)]">
       {/* Console Header */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-4 mb-6">
-        <Terminal className="w-5 h-5 text-sky-500" />
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">AI Agent Orchestration Console</h2>
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-sky-500" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">AI Agent Orchestration Console</h2>
+        </div>
+
+        {messages.length > 1 && (
+          <button
+            onClick={handleClearHistory}
+            className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 px-2.5 py-1 rounded-md border border-slate-200 hover:border-rose-200 bg-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+            title="Clear conversation history"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Clear Chat
+          </button>
+        )}
       </div>
 
       {/* Message Area */}
@@ -101,10 +208,10 @@ export const AgentConsole: React.FC = () => {
             {/* Message Bubble */}
             <div className={`p-4 rounded-xl text-xs leading-relaxed ${
               m.sender === "merchant"
-                ? "bg-sky-50 text-sky-950 border border-sky-100 rounded-tr-none"
-                : "bg-slate-50 border border-slate-200 text-slate-600 rounded-tl-none"
+                ? "bg-sky-50 text-sky-950 border border-sky-100 rounded-tr-none font-medium"
+                : "bg-slate-50 border border-slate-200 text-slate-700 rounded-tl-none"
             }`}>
-              <div className="font-mono whitespace-pre-wrap">{m.text}</div>
+              <div>{renderFormattedMessage(m.text)}</div>
               <span className="block text-[8px] text-slate-400 text-right mt-1.5 font-mono">
                 {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
