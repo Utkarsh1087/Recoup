@@ -1,4 +1,9 @@
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = 
+  import.meta.env.VITE_API_BASE_URL || 
+  (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" 
+    ? "/api" 
+    : "http://localhost:8000/api");
+
 
 export interface DashboardSummary {
   revenue_at_risk: number;
@@ -87,8 +92,15 @@ export interface Transaction {
 }
 
 export const api = {
+  // Health & Server Info
+  async getHealth(): Promise<any> {
+    const res = await fetch(`${API_BASE_URL}/health`);
+    return res.json();
+  },
+
   // Dashboard
   async getDashboardSummary(): Promise<DashboardSummary> {
+
     const res = await fetch(`${API_BASE_URL}/dashboard/summary`);
     return res.json();
   },
