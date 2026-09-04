@@ -137,14 +137,11 @@ def send_recovery_message(db: Session, case_id: int, customer_id: int, template_
         return {"error": policy_res["reason"]}
         
     cust = db.query(Customer).filter(Customer.id == customer_id).first()
+    cust_name = cust.name if cust else "there"
     
-    # Build clean outbound customer message
-    link = get_payment_service().create_payment_link(case.source_id, case.amount_at_risk, {"name": cust.name, "email": cust.email, "phone": cust.phone or ""})
-    message = (
-        f"Hi {cust.name}, we noticed your payment of ₹{case.amount_at_risk:,.2f} for order #{case.source_id} was unsuccessful. "
-        f"You can quickly complete your payment here: {link}\n"
-        f"If you need any help, simply reply to this message."
-    )
+    # Build clean, short, human-friendly outbound customer message
+    link = get_payment_service().create_payment_link(case.source_id, case.amount_at_risk, {"name": cust.name if cust else "Customer", "email": cust.email if cust else "", "phone": cust.phone if cust else ""})
+    message = f"Hi {cust_name}, your payment of ₹{case.amount_at_risk:,.2f} didn't go through. You can complete it safely here: {link}"
     
     # Update case status
     case.status = "IN_PROGRESS"
@@ -155,14 +152,14 @@ def send_recovery_message(db: Session, case_id: int, customer_id: int, template_
         event_type="ACTION_EXECUTION",
         action="recovery_message",
         tool_called="send_recovery_message",
-        tool_input_summary=f"customer_id: {customer_id}, recipient: {cust.phone or cust.email}, template: {template_name}",
-        tool_result_summary=f"Message dispatched successfully to {cust.phone or cust.email}.\n\n--- OUTBOUND MESSAGE ---\n{message}",
+        tool_input_summary=f"customer_id: {customer_id}, recipient: {cust.phone or cust.email if cust else 'customer'}, template: {template_name}",
+        tool_result_summary=f"Message sent to customer.\n\n--- OUTBOUND MESSAGE ---\n{message}",
         result="PENDING_USER_ACTION"
     )
     db.add(log_action)
     db.commit()
     
-    return {"status": "dispatched", "message": message, "recipient": cust.phone or cust.email}
+    return {"status": "dispatched", "message": message, "recipient": cust.phone or cust.email if cust else ""}
 
 
 def create_payment_retry(db: Session, case_id: int, transaction_id: str):
@@ -284,8 +281,12 @@ def generate_payment_retry_link(db: Session, case_id: int, transaction_id: str):
     if not policy_res["allowed"]:
         return {"error": policy_res["reason"]}
         
+    cust = db.query(Customer).filter(Customer.id == case.customer_id).first()
+    cust_name = cust.name if cust else "there"
     payment_service = get_payment_service()
     link = payment_service.create_payment_link(transaction_id, case.amount_at_risk)
+    
+    message = f"Hi {cust_name}, your payment of ₹{case.amount_at_risk:,.2f} didn't go through. You can complete it safely here: {link}"
     
     case.status = "ACTION_PENDING"
     case.selected_action = "alternative_payment_method"
@@ -296,13 +297,13 @@ def generate_payment_retry_link(db: Session, case_id: int, transaction_id: str):
         action="alternative_payment_method",
         tool_called="generate_payment_retry_link",
         tool_input_summary=f"transaction_id: {transaction_id}",
-        tool_result_summary=f"Generated secure check-out / alternate payment link: {link}",
+        tool_result_summary=f"Created payment link.\n\n--- OUTBOUND MESSAGE ---\n{message}",
         result="PENDING_USER_ACTION"
     )
     db.add(log_action)
     db.commit()
     
-    return {"status": "link_created", "link": link}
+    return {"status": "link_created", "link": link, "message": message}
 
 def offer_bounded_incentive(db: Session, case_id: int, customer_id: int, discount_pct: float):
     case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
@@ -324,15 +325,15 @@ def offer_bounded_incentive(db: Session, case_id: int, customer_id: int, discoun
         return {"error": policy_res["reason"]}
         
     cust = db.query(Customer).filter(Customer.id == customer_id).first()
+    cust_name = cust.name if cust else "there"
     
     # Calculate new amount
     discounted_amount = case.amount_at_risk * (1 - (discount_pct / 100))
-    link = get_payment_service().create_payment_link(case.source_id, discounted_amount, {"name": cust.name, "email": cust.email, "phone": cust.phone or ""})
+    link = get_payment_service().create_payment_link(case.source_id, discounted_amount, {"name": cust.name if cust else "Customer", "email": cust.email if cust else "", "phone": cust.phone if cust else ""})
     coupon_code = f"SAVE{int(discount_pct)}"
     message = (
-        f"Hi {cust.name}, complete your purchase for order #{case.source_id} today and get an exclusive "
-        f"{int(discount_pct)}% discount with code {coupon_code}! "
-        f"Discounted total: ₹{discounted_amount:,.2f}. Complete here: {link}"
+        f"Hi {cust_name}, complete your order today and get {int(discount_pct)}% off (Code: {coupon_code})! "
+        f"Pay ₹{discounted_amount:,.2f} here: {link}"
     )
     
     case.status = "ACTION_PENDING"
@@ -343,14 +344,14 @@ def offer_bounded_incentive(db: Session, case_id: int, customer_id: int, discoun
         event_type="ACTION_EXECUTION",
         action="bounded_incentive",
         tool_called="offer_bounded_incentive",
-        tool_input_summary=f"discount: {discount_pct}%, original: ₹{case.amount_at_risk:,.2f}, recipient: {cust.phone or cust.email}",
+        tool_input_summary=f"discount: {discount_pct}%, original: ₹{case.amount_at_risk:,.2f}, recipient: {cust.phone or cust.email if cust else 'customer'}",
         tool_result_summary=f"Offered {discount_pct}% discount (Coupon '{coupon_code}').\n\n--- OUTBOUND MESSAGE ---\n{message}",
         result="PENDING_USER_ACTION"
     )
     db.add(log_action)
     db.commit()
     
-    return {"status": "coupon_offered", "discount_pct": discount_pct, "payment_link": link, "message": message}
+    return {"status": "coupon_offered", "discount_pct": discount_pct, "payment_link": link, "message": message, "discount_code": coupon_code}
 
 
 def check_payment_status(db: Session, case_id: int, transaction_id: str):

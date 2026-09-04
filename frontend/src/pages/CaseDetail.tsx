@@ -153,18 +153,27 @@ export const CaseDetail: React.FC = () => {
     const actionLog = caseDetail.audit_logs?.find((l) => l.event_type === "ACTION_EXECUTION");
     let resultMsg = "";
     if (actionLog && actionLog.tool_result_summary) {
+      if (actionLog.tool_result_summary.includes("--- OUTBOUND MESSAGE ---")) {
+        const parts = actionLog.tool_result_summary.split("--- OUTBOUND MESSAGE ---");
+        if (parts[1]) {
+          return parts[1].trim();
+        }
+      }
       try {
         const parsed = JSON.parse(actionLog.tool_result_summary);
         if (parsed.message_sent) resultMsg = parsed.message_sent;
         else if (parsed.message) resultMsg = parsed.message;
       } catch {
-        resultMsg = actionLog.tool_result_summary;
+        if (!actionLog.tool_result_summary.startsWith("Generated secure") && !actionLog.tool_result_summary.startsWith("Created payment")) {
+          resultMsg = actionLog.tool_result_summary;
+        }
       }
     }
-    if (resultMsg && !resultMsg.includes("...")) {
+    if (resultMsg) {
       return resultMsg;
     }
-    return `Hi ${caseDetail.customer?.name || "there"}, we noticed your transaction of ₹${formattedAmt} for order #${caseDetail.source_id} could not be completed. You can safely complete your payment here: ${defaultSimulatorUrl}`;
+    const custName = caseDetail.customer?.name || "there";
+    return `Hi ${custName}, your payment of ₹${formattedAmt} didn't go through. You can complete it safely here: ${defaultSimulatorUrl}`;
   };
 
   const activeMessage = editedMessage || getDynamicGeneratedMessage();
