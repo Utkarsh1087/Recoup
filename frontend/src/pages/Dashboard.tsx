@@ -14,9 +14,12 @@ import {
   Activity,
   Zap,
   DollarSign,
-  Target
+  Target,
+  Sparkles,
+  Bot
 } from "lucide-react";
 import { getAvailableMonths } from "../utils/dateUtils";
+import { ProcessedCaseResult } from "../components/AiMissionControlModal";
 import { 
   AreaChart, 
   Area, 
@@ -42,13 +45,17 @@ interface DashboardProps {
   selectedMonth: string;
   startDate: string;
   endDate: string;
+  missionResults?: ProcessedCaseResult[];
+  onInspectMissionCase?: (caseId: number) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
   dateFilterType,
   selectedMonth,
   startDate,
-  endDate
+  endDate,
+  missionResults = [],
+  onInspectMissionCase
 }) => {
   const [loading, setLoading] = useState(true);
   const [allCases, setAllCases] = useState<RecoveryCase[]>([]);
@@ -477,43 +484,76 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </td>
                 </tr>
               ) : (
-                opps.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/20 transition-colors text-xs text-slate-600">
-                    <td className="py-4 px-6">
-                      <div className="font-bold text-slate-900">{c.customer?.name}</div>
-                      <div className="text-[10px] text-slate-400">{c.customer?.email}</div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500 font-mono font-semibold">
-                        {c.source_type.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 font-bold text-slate-900">₹{c.amount_at_risk.toLocaleString("en-IN")}</td>
-                    <td className="py-4 px-6 text-center font-mono font-bold text-slate-700">{Math.round(c.recovery_probability * 100)}%</td>
-                    <td className="py-4 px-6 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                        c.priority === "CRITICAL" 
-                          ? "bg-rose-50 text-rose-600 border border-rose-100" 
-                          : c.priority === "HIGH" 
-                          ? "bg-orange-50 text-orange-600 border border-orange-100" 
-                          : c.priority === "MEDIUM" 
-                          ? "bg-yellow-50 text-yellow-600 border border-yellow-100" 
-                          : "bg-sky-50 text-sky-600 border border-sky-100"
-                      }`}>
-                        {c.priority}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <Link 
-                        to={`/cases/${c.id}`}
-                        className="inline-flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1.5 rounded-md font-semibold transition-all shadow-sm"
-                      >
-                        Inspect
-                        <ArrowRight className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))
+                opps.map((c) => {
+                  const missionMatch = missionResults.find(r => r.case_id === c.id);
+                  return (
+                    <tr 
+                      key={c.id} 
+                      className={`border-b transition-colors text-xs text-slate-600 ${
+                        missionMatch 
+                          ? "bg-sky-50/60 hover:bg-sky-100/60 border-l-4 border-l-sky-500 border-slate-100" 
+                          : "border-slate-100 hover:bg-slate-50/20"
+                      }`}
+                    >
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="font-bold text-slate-900">{c.customer?.name}</div>
+                            <div className="text-[10px] text-slate-400">{c.customer?.email}</div>
+                          </div>
+                          {missionMatch && (
+                            <span className="bg-sky-100 text-sky-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 font-sans">
+                              <Sparkles className="w-2.5 h-2.5 text-sky-600" />
+                              AI
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500 font-mono font-semibold">
+                          {c.source_type.replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 font-bold text-slate-900">₹{c.amount_at_risk.toLocaleString("en-IN")}</td>
+                      <td className="py-4 px-6 text-center font-mono font-bold text-slate-700">{Math.round(c.recovery_probability * 100)}%</td>
+                      <td className="py-4 px-6 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                          c.priority === "CRITICAL" 
+                            ? "bg-rose-50 text-rose-600 border border-rose-100" 
+                            : c.priority === "HIGH" 
+                            ? "bg-orange-50 text-orange-600 border border-orange-100" 
+                            : c.priority === "MEDIUM" 
+                            ? "bg-yellow-50 text-yellow-600 border border-yellow-100" 
+                            : "bg-sky-50 text-sky-600 border border-sky-100"
+                        }`}>
+                          {c.priority}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {missionMatch && onInspectMissionCase && (
+                            <button
+                              type="button"
+                              onClick={() => onInspectMissionCase(c.id)}
+                              title="View AI Agent Diagnosis & Actions for this case"
+                              className="inline-flex items-center gap-1 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 px-2 py-1.5 rounded-md font-bold transition-all shadow-xs cursor-pointer text-[11px]"
+                            >
+                              <Bot className="w-3 h-3 text-sky-600" />
+                              AI Insights
+                            </button>
+                          )}
+                          <Link 
+                            to={`/cases/${c.id}`}
+                            className="inline-flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1.5 rounded-md font-semibold transition-all shadow-sm"
+                          >
+                            Inspect
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

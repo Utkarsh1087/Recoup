@@ -15,6 +15,8 @@ import PaymentSimulator from "./pages/PaymentSimulator";
 import { api } from "./services/api";
 import { getCurrentMonthValue, getMonthDateRange } from "./utils/dateUtils";
 
+import { AiMissionControlModal, ProcessedCaseResult } from "./components/AiMissionControlModal";
+
 interface LayoutWrapperProps {
   children: React.ReactNode;
   dateFilterType: "monthly" | "custom";
@@ -25,6 +27,10 @@ interface LayoutWrapperProps {
   setStartDate: (val: string) => void;
   endDate: string;
   setEndDate: (val: string) => void;
+  isDemoRunning: boolean;
+  onRunDemo: () => void;
+  missionResults: ProcessedCaseResult[];
+  onOpenMissionControl: () => void;
 }
 
 const LayoutWrapper: React.FC<LayoutWrapperProps> = ({ 
@@ -36,26 +42,16 @@ const LayoutWrapper: React.FC<LayoutWrapperProps> = ({
   startDate,
   setStartDate,
   endDate,
-  setEndDate
+  setEndDate,
+  isDemoRunning,
+  onRunDemo,
+  missionResults,
+  onOpenMissionControl
 }) => {
   const location = useLocation();
-  const [isDemoRunning, setIsDemoRunning] = useState(false);
 
   // If path is payment simulator, bypass dashboard layout wrapping completely
   const isSimulator = location.pathname.startsWith("/payment-simulator");
-
-  // Run Demo Recovery
-  const handleRunDemo = async () => {
-    try {
-      setIsDemoRunning(true);
-      const res = await api.runDemoBatch();
-      alert(`Demo execution complete! Agent ran recovery on ${res.processed} open cases.`);
-    } catch (e) {
-      alert("Error executing demo batch");
-    } finally {
-      setIsDemoRunning(false);
-    }
-  };
 
   // Reset database back to seed
   const handleResetData = async () => {
@@ -97,7 +93,7 @@ const LayoutWrapper: React.FC<LayoutWrapperProps> = ({
       <div className="flex-1 pl-64 flex flex-col min-h-screen min-w-0 overflow-x-hidden">
         <Header 
           title={getHeaderTitle(location.pathname)} 
-          onRunDemo={handleRunDemo} 
+          onRunDemo={onRunDemo} 
           isDemoRunning={isDemoRunning} 
           dateFilterType={dateFilterType}
           setDateFilterType={setDateFilterType}
@@ -107,6 +103,8 @@ const LayoutWrapper: React.FC<LayoutWrapperProps> = ({
           setStartDate={setStartDate}
           endDate={endDate}
           setEndDate={setEndDate}
+          missionResultsCount={missionResults.length}
+          onOpenMissionControl={onOpenMissionControl}
         />
         <main className="flex-1 bg-[#f5f9fc]/50 min-w-0 overflow-x-hidden">
           {children}
@@ -125,6 +123,35 @@ export const App: React.FC = () => {
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
 
+  // Live Mission Control States
+  const [isDemoRunning, setIsDemoRunning] = useState(false);
+  const [isMissionControlOpen, setIsMissionControlOpen] = useState(false);
+  const [missionResults, setMissionResults] = useState<ProcessedCaseResult[]>([]);
+  const [selectedMissionCaseId, setSelectedMissionCaseId] = useState<number | null>(null);
+
+  // Run Demo Recovery
+  const handleRunDemo = async () => {
+    try {
+      setIsDemoRunning(true);
+      setSelectedMissionCaseId(null);
+      setIsMissionControlOpen(true);
+      setMissionResults([]);
+      const res = await api.runDemoBatch();
+      if (res && res.results) {
+        setMissionResults(res.results);
+      }
+    } catch (e) {
+      alert("Error executing demo batch");
+    } finally {
+      setIsDemoRunning(false);
+    }
+  };
+
+  const handleInspectMissionCase = (caseId: number) => {
+    setSelectedMissionCaseId(caseId);
+    setIsMissionControlOpen(true);
+  };
+
   return (
     <Router>
       <LayoutWrapper
@@ -136,10 +163,38 @@ export const App: React.FC = () => {
         setStartDate={setStartDate}
         endDate={endDate}
         setEndDate={setEndDate}
+        isDemoRunning={isDemoRunning}
+        onRunDemo={handleRunDemo}
+        missionResults={missionResults}
+        onOpenMissionControl={() => setIsMissionControlOpen(true)}
       >
         <Routes>
-          <Route path="/" element={<Dashboard dateFilterType={dateFilterType} selectedMonth={selectedMonth} startDate={startDate} endDate={endDate} />} />
-          <Route path="/cases" element={<Cases dateFilterType={dateFilterType} selectedMonth={selectedMonth} startDate={startDate} endDate={endDate} />} />
+          <Route 
+            path="/" 
+            element={
+              <Dashboard 
+                dateFilterType={dateFilterType} 
+                selectedMonth={selectedMonth} 
+                startDate={startDate} 
+                endDate={endDate}
+                missionResults={missionResults}
+                onInspectMissionCase={handleInspectMissionCase}
+              />
+            } 
+          />
+          <Route 
+            path="/cases" 
+            element={
+              <Cases 
+                dateFilterType={dateFilterType} 
+                selectedMonth={selectedMonth} 
+                startDate={startDate} 
+                endDate={endDate}
+                missionResults={missionResults}
+                onInspectMissionCase={handleInspectMissionCase}
+              />
+            } 
+          />
           <Route path="/cases/:id" element={<CaseDetail />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/customers" element={<Customers />} />
@@ -150,6 +205,16 @@ export const App: React.FC = () => {
           <Route path="/payment-simulator/:tx_id" element={<PaymentSimulator />} />
         </Routes>
       </LayoutWrapper>
+
+      {/* Global AI Mission Control Reasoning Modal */}
+      <AiMissionControlModal
+        isOpen={isMissionControlOpen}
+        onClose={() => setIsMissionControlOpen(false)}
+        isRunning={isDemoRunning}
+        results={missionResults}
+        totalToProcess={8}
+        selectedCaseId={selectedMissionCaseId}
+      />
     </Router>
   );
 };

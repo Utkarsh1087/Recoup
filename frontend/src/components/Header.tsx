@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, AlertTriangle } from "lucide-react";
+import { Play, AlertTriangle, Sparkles, Bot } from "lucide-react";
 
 interface HeaderProps {
   title: string;
@@ -13,6 +13,8 @@ interface HeaderProps {
   setStartDate: (val: string) => void;
   endDate: string;
   setEndDate: (val: string) => void;
+  missionResultsCount?: number;
+  onOpenMissionControl?: () => void;
 }
 
 import { getAvailableMonths, getMonthDateRange } from "../utils/dateUtils";
@@ -28,7 +30,9 @@ export const Header: React.FC<HeaderProps> = ({
   startDate,
   setStartDate,
   endDate,
-  setEndDate
+  setEndDate,
+  missionResultsCount = 0,
+  onOpenMissionControl
 }) => {
   const monthsList = getAvailableMonths();
 
@@ -108,6 +112,17 @@ export const Header: React.FC<HeaderProps> = ({
           <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
           Test Mode Active
         </div>
+
+        {/* Live AI Mission Control Button (Shown when results exist or running) */}
+        {(missionResultsCount > 0 || isDemoRunning) && (
+          <button
+            onClick={onOpenMissionControl}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-colors shadow-xs cursor-pointer"
+          >
+            <Bot className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
+            <span>AI Stream ({missionResultsCount})</span>
+          </button>
+        )}
 
         {/* Play Action Button */}
         <button
